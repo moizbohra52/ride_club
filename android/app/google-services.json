@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "613319021790",
+    "project_id": "ridetogether-nwaytech",
+    "storage_bucket": "ridetogether-nwaytech.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:613319021790:android:76f202c566ee4292eade4f",
+        "android_client_info": {
+          "package_name": "com.ridetogether.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "613319021790-vberf91iiofmhn409ouufvsi026v6t8g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ridetogether.app",
+            "certificate_hash": "22096d938b13d2000d4fc5719a177e543fc36acc"
+          }
+        },
+        {
+          "client_id": "613319021790-jtnpgo3a57f5875fgld29gr4cgge8smd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfxkMNLUOPp1Zr5dnp9Z56UN6pB7LK1lg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "613319021790-jtnpgo3a57f5875fgld29gr4cgge8smd.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "613319021790-21mmqj08i34k9nd48s20jje5ole9okh9.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rideClub"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
