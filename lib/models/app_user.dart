@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// A RideTogether user profile, stored at Firestore `users/{uid}`.
+/// A RideClub user profile, stored at Firestore `users/{uid}`.
 ///
 /// A profile is considered "complete" once [name] is set (see [isComplete]),
 /// which is what gates routing between profile-setup and home.
@@ -63,8 +63,7 @@ class AppUser {
       'photoUrl': photoUrl,
       'emergencyContact': emergencyContact,
       'fcmToken': fcmToken,
-      'createdAt':
-          isNew ? FieldValue.serverTimestamp() : createdAt?.toUtc(),
+      'createdAt': isNew ? FieldValue.serverTimestamp() : createdAt?.toUtc(),
     };
   }
 

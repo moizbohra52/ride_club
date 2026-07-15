@@ -4,6 +4,7 @@ import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
+import '../../core/utils/logger.dart';
 import '../../models/member_location.dart';
 import '../../models/ride.dart';
 import '../../models/ride_member.dart';
@@ -19,7 +20,7 @@ import '../../services/sos_service.dart';
 import '../sos/sos_ui.dart';
 
 class RideMapController extends GetxController
-    with GetSingleTickerProviderStateMixin {
+    with GetTickerProviderStateMixin {
   final LocationService _loc = Get.find<LocationService>();
   final RideLocationService _rideLoc = Get.find<RideLocationService>();
   final RoutingService _routing = Get.find<RoutingService>();
@@ -31,6 +32,7 @@ class RideMapController extends GetxController
   RideMapController(this.rideId);
 
   late final AnimatedMapController animatedMapController;
+  bool _isDisposed = false;
 
   /// The underlying raw MapController — passed to FlutterMap and used for
   /// camera reads (e.g. rotation for marker counter-rotation).
@@ -59,6 +61,8 @@ class RideMapController extends GetxController
   final RxMap<String, RouteResult> memberRoutes = <String, RouteResult>{}.obs;
   final RxBool rerouting = false.obs;
   final Rxn<LatLng> destination = Rxn<LatLng>();
+  final Rxn<List<LatLng>> plannedRoute = Rxn<List<LatLng>>();
+  final RxList<RideDestination> orderedStops = <RideDestination>[].obs;
   final Distance _dist = const Distance();
   final Map<String, LatLng> _lastRoutedFrom = <String, LatLng>{};
 
@@ -71,8 +75,8 @@ class RideMapController extends GetxController
     super.onInit();
     animatedMapController = AnimatedMapController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.linear,
       cancelPreviousAnimations: true,
     );
     _start();
@@ -119,6 +123,8 @@ class RideMapController extends GetxController
     _rideService.watchRide(rideId).listen((Ride? r) {
       final dest = r?.destination;
       destination.value = dest == null ? null : LatLng(dest.lat, dest.lng);
+      plannedRoute.value = r?.plannedRoute;
+      orderedStops.value = r?.orderedStops ?? <RideDestination>[];
     });
 
     // My route: recompute when I move ≥100m or go off-route.
@@ -131,10 +137,11 @@ class RideMapController extends GetxController
       }
     });
 
-    // Follow mode: re-center on the target whenever its position updates,
+    // Follow mode: re-center on the target whenever its position or heading updates,
     // but only while actively following (stops as soon as the user drags).
     ever<LatLng?>(myLatLng, (_) => _followIfActive());
     ever<List<MemberLocation>>(members, (_) => _followIfActive());
+    ever<double>(myHeading, (_) => _followIfActive());
 
     ready.value = true;
   }
@@ -155,7 +162,8 @@ class RideMapController extends GetxController
     if (me == null || dest == null) return;
     final LatLng? last = _lastRoutedFrom['me'];
     final bool moved = last == null || _meters(last, me) >= 100;
-    final bool offRoute = myRoute.value != null &&
+    final bool offRoute =
+        myRoute.value != null &&
         _distanceToRoute(me, myRoute.value!.points) > 50;
     if (!moved && !offRoute) return;
     if (offRoute) rerouting.value = true;
@@ -226,23 +234,42 @@ class RideMapController extends GetxController
   }
 
   void _startFollowing({String? target}) {
+    if (_isDisposed) return;
+    Log.d('_startFollowing called with target: $target');
     followTarget.value = target;
     isFollowing.value = true;
     final LatLng? pos = _followTargetPosition();
-    if (pos == null) return;
+    if (pos == null) {
+      Log.d('_startFollowing: no position found for target $target');
+      return;
+    }
     final double heading = _followTargetHeading() ?? 0;
+    Log.d(
+      '_startFollowing: animating to lat: ${pos.latitude}, lng: ${pos.longitude}, heading: $heading',
+    );
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
-      zoom: 16,
+      zoom: 20,
       rotation: -heading,
     );
   }
 
   void _followIfActive() {
+    if (_isDisposed) {
+      Log.d('_followIfActive called after disposal');
+      return;
+    }
+    Log.d('_followIfActive called, isFollowing: ${isFollowing.value}');
     if (!isFollowing.value) return;
     final LatLng? pos = _followTargetPosition();
-    if (pos == null) return;
+    if (pos == null) {
+      Log.d('_followIfActive: no position');
+      return;
+    }
     final double heading = _followTargetHeading() ?? 0;
+    Log.d(
+      '_followIfActive: moving to lat: ${pos.latitude}, lng: ${pos.longitude}, heading: $heading',
+    );
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
       zoom: mapController.camera.zoom,
@@ -251,16 +278,31 @@ class RideMapController extends GetxController
   }
 
   void zoomIn() {
-    animatedMapController.animateTo(zoom: mapController.camera.zoom + 1);
+    if (_isDisposed) return;
+    onMapDragged(); // Stop following when zooming via button
+    final double newZoom = mapController.camera.zoom + 1;
+    animatedMapController.animateTo(
+      dest: mapController.camera.center,
+      zoom: newZoom,
+      rotation: mapController.camera.rotation,
+    );
   }
 
   void zoomOut() {
-    animatedMapController.animateTo(zoom: mapController.camera.zoom - 1);
+    if (_isDisposed) return;
+    onMapDragged(); // Stop following when zooming via button
+    final double newZoom = mapController.camera.zoom - 1;
+    animatedMapController.animateTo(
+      dest: mapController.camera.center,
+      zoom: newZoom,
+      rotation: mapController.camera.rotation,
+    );
   }
 
   /// One-shot overview: frame all members + me + destination. Stops follow
   /// (like a manual gesture) so the auto-follow loop won't yank the camera.
   void fitAll() {
+    if (_isDisposed) return;
     isFollowing.value = false;
     final List<LatLng> pts = <LatLng>[
       for (final MemberLocation m in members) LatLng(m.lat, m.lng),
@@ -285,11 +327,26 @@ class RideMapController extends GetxController
   }
 
   /// Recenter FAB: resume following the last target (self, or a member if
-  /// one was previously selected).
-  void recenter() => _startFollowing(target: followTarget.value);
+  /// one was previously selected). Immediately snaps to target with heading.
+  void recenter() {
+    if (_isDisposed) return;
+    isFollowing.value = true;
+    final String? target = followTarget.value;
+    final LatLng? pos = _followTargetPosition();
+    final double heading = _followTargetHeading() ?? 0;
+    if (pos == null) return;
+    Log.d('recenter: target=$target, heading=$heading');
+    animatedMapController.animateTo(
+      dest: _cameraCenterBehind(pos, heading),
+      zoom: 16.5,
+      rotation: -heading,
+    );
+  }
 
   /// Members list tap: start following this specific member.
-  void followMember(MemberLocation m) => _startFollowing(target: m.uid);
+  void followMember(MemberLocation m) {
+    if (!_isDisposed) _startFollowing(target: m.uid);
+  }
 
   /// Called when the user drags/pinches the map — stops auto-follow so we
   /// don't fight their gesture. The recenter FAB reappears in its
@@ -300,6 +357,7 @@ class RideMapController extends GetxController
 
   @override
   void onClose() {
+    _isDisposed = true;
     animatedMapController.dispose();
     _rideLoc.stopSharing(rideId);
     super.onClose();

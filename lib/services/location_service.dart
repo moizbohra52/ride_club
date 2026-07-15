@@ -6,7 +6,12 @@ import 'package:get/get.dart';
 import '../core/utils/logger.dart';
 import '../models/ride_position.dart';
 
-enum LocationPermissionResult { granted, serviceDisabled, denied, deniedForever }
+enum LocationPermissionResult {
+  granted,
+  serviceDisabled,
+  denied,
+  deniedForever,
+}
 
 /// GPS + battery + compass wrapper.
 ///
@@ -67,7 +72,9 @@ class LocationService extends GetxService {
   Future<Position?> currentPosition() async {
     try {
       return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
     } catch (e, s) {
       Log.e('currentPosition failed', error: e, stack: s);
@@ -85,8 +92,9 @@ class LocationService extends GetxService {
           : const Duration(milliseconds: 2500);
       try {
         final Position pos = await Geolocator.getCurrentPosition(
-          locationSettings:
-              const LocationSettings(accuracy: LocationAccuracy.high),
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ),
         );
         yield RidePosition(
           lat: pos.latitude,
@@ -105,13 +113,13 @@ class LocationService extends GetxService {
   /// Android foreground-location settings with a persistent notification, so
   /// tracking survives backgrounding. Kept for the always-on stream in Phase 7.
   AndroidSettings androidForegroundSettings() => AndroidSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'RideTogether',
-          notificationText: 'Sharing your live location with your ride',
-          enableWakeLock: true,
-          setOngoing: true,
-        ),
-      );
+    accuracy: LocationAccuracy.high,
+    distanceFilter: 0,
+    foregroundNotificationConfig: const ForegroundNotificationConfig(
+      notificationTitle: 'RideClub',
+      notificationText: 'Sharing your live location with your ride',
+      enableWakeLock: true,
+      setOngoing: true,
+    ),
+  );
 }

@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -48,19 +49,31 @@ Future<void> main() async {
       // Default app already initialized natively — reuse it.
       Firebase.app();
     }
+
+    // Initialize App Check with debug provider for development
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: AndroidProvider.debug,
+      appleProvider: AppleProvider.debug,
+    );
   } on FirebaseException catch (e, s) {
     if (e.code == 'duplicate-app') {
       // Harmless race: the native default app already exists. Carry on.
       Log.d('Firebase default app already existed; reusing it.');
     } else {
-      Log.e('Firebase init failed — check firebase_options.dart',
-          error: e, stack: s);
+      Log.e(
+        'Firebase init failed — check firebase_options.dart',
+        error: e,
+        stack: s,
+      );
       runApp(const _FirebaseConfigError());
       return;
     }
   } catch (e, s) {
-    Log.e('Firebase init failed — check firebase_options.dart',
-        error: e, stack: s);
+    Log.e(
+      'Firebase init failed — check firebase_options.dart',
+      error: e,
+      stack: s,
+    );
     runApp(const _FirebaseConfigError());
     return;
   }
@@ -81,18 +94,18 @@ Future<void> main() async {
   Get.put<SosService>(SosService(), permanent: true);
   Get.put<NotificationService>(NotificationService(), permanent: true);
 
-  runApp(const RideTogetherApp());
+  runApp(const RideClubApp());
 }
 
-class RideTogetherApp extends StatelessWidget {
-  const RideTogetherApp({super.key});
+class RideClubApp extends StatelessWidget {
+  const RideClubApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final ThemeService themeService = Get.find<ThemeService>();
     return Obx(
       () => GetMaterialApp(
-        title: 'RideTogether',
+        title: 'RideClub',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
@@ -126,8 +139,7 @@ class _FirebaseConfigError extends StatelessWidget {
                 Text(
                   'Firebase is not configured yet',
                   textAlign: TextAlign.center,
-                  style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 12),
                 Text(

@@ -41,8 +41,9 @@ class ProfileSetupView extends GetView<ProfileSetupController> {
                               children: <Widget>[
                                 Text(
                                   'Set up your profile',
-                                  style:
-                                      Theme.of(context).textTheme.headlineSmall,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.headlineSmall,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -111,9 +112,7 @@ class _Header extends StatelessWidget {
           Container(
             height: 170,
             width: double.infinity,
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceAccent,
-            ),
+            decoration: const BoxDecoration(color: AppColors.surfaceAccent),
             child: SafeArea(
               bottom: false,
               child: Padding(
@@ -125,11 +124,14 @@ class _Header extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: <Widget>[
-                        const Icon(Icons.explore_rounded,
-                            color: Colors.white, size: 22),
+                        const Icon(
+                          Icons.explore_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                         const SizedBox(width: 8),
                         Text(
-                          'RideTogether',
+                          'RideClub',
                           style: GoogleFonts.poppins(
                             color: Colors.white.withValues(alpha: 0.95),
                             fontSize: 16,
@@ -162,10 +164,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           // Avatar overlapping the gradient's bottom edge.
-          Positioned(
-            bottom: 0,
-            child: _PhotoPicker(scheme: scheme),
-          ),
+          Positioned(bottom: 0, child: _PhotoPicker(scheme: scheme)),
         ],
       ),
     );
@@ -185,9 +184,9 @@ class _PhotoPicker extends StatelessWidget {
         final ImageProvider? provider = c.pickedImage.value != null
             ? FileImage(c.pickedImage.value!)
             : (c.existingPhotoUrl.value != null
-                ? CachedNetworkImageProvider(c.existingPhotoUrl.value!)
-                    as ImageProvider
-                : null);
+                  ? CachedNetworkImageProvider(c.existingPhotoUrl.value!)
+                        as ImageProvider
+                  : null);
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -201,8 +200,11 @@ class _PhotoPicker extends StatelessWidget {
                 backgroundColor: scheme.primaryContainer,
                 backgroundImage: provider,
                 child: provider == null
-                    ? Icon(Icons.person,
-                        size: 48, color: scheme.onPrimaryContainer)
+                    ? Icon(
+                        Icons.person,
+                        size: 48,
+                        color: scheme.onPrimaryContainer,
+                      )
                     : null,
               ),
               Positioned(
@@ -216,8 +218,11 @@ class _PhotoPicker extends StatelessWidget {
                     border: Border.all(color: scheme.surface, width: 2),
                     boxShadow: AppElevation.soft(AppColors.sunset),
                   ),
-                  child: const Icon(Icons.camera_alt,
-                      size: 15, color: Colors.white),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    size: 15,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
@@ -234,9 +239,13 @@ class _PhotoPicker extends StatelessWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text('Profile photo',
-                  style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700, fontSize: 16)),
+              child: Text(
+                'Profile photo',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),

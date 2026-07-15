@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
+import 'package:latlong2/latlong.dart';
 import '../core/theme/app_colors.dart';
 import '../models/join_request.dart';
 import '../models/ride.dart';
@@ -28,15 +29,17 @@ class RideService extends GetxService {
 
   /// A 6-char code from an unambiguous alphabet (no 0/O/1/I).
   String generateCode() => List<String>.generate(
-        6,
-        (_) => _alphabet[_rng.nextInt(_alphabet.length)],
-      ).join();
+    6,
+    (_) => _alphabet[_rng.nextInt(_alphabet.length)],
+  ).join();
 
   Future<String> _uniqueCode() async {
     for (int i = 0; i < 5; i++) {
       final String code = generateCode();
-      final QuerySnapshot<Map<String, dynamic>> snap =
-          await _rides.where('code', isEqualTo: code).limit(1).get();
+      final QuerySnapshot<Map<String, dynamic>> snap = await _rides
+          .where('code', isEqualTo: code)
+          .limit(1)
+          .get();
       if (snap.docs.isEmpty) return code;
     }
     throw Exception('Could not allocate a ride code. Please try again.');
@@ -45,6 +48,11 @@ class RideService extends GetxService {
   Future<Ride> createRide({
     required String name,
     RideDestination? destination,
+    RideDestination? origin,
+    List<RideDestination> waypoints = const <RideDestination>[],
+    List<LatLng>? plannedRoute,
+    double? plannedDistanceMeters,
+    double? plannedDurationSeconds,
   }) async {
     final String? uid = _auth.uid;
     if (uid == null) throw Exception('You are not signed in.');
@@ -57,6 +65,11 @@ class RideService extends GetxService {
       name: name.trim(),
       code: code,
       destination: destination,
+      origin: origin,
+      waypoints: waypoints,
+      plannedRoute: plannedRoute,
+      plannedDistanceMeters: plannedDistanceMeters,
+      plannedDurationSeconds: plannedDurationSeconds,
       createdBy: uid,
       status: 'active',
       memberCount: 1,
@@ -80,37 +93,39 @@ class RideService extends GetxService {
       'joinedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit().timeout(
-          _timeout,
-          onTimeout: () => throw Exception(
-              'Creating the ride timed out. Check your connection.'),
-        );
+      _timeout,
+      onTimeout: () => throw Exception(
+        'Creating the ride timed out. Check your connection.',
+      ),
+    );
     return ride;
   }
 
   Stream<List<Ride>> watchMyRides() {
     final String? uid = _auth.uid;
     if (uid == null) return const Stream<List<Ride>>.empty();
-    return _rideRefs(uid).snapshots().asyncMap(
-      (QuerySnapshot<Map<String, dynamic>> refs) async {
-        final List<String> ids = refs.docs.map((d) => d.id).toList();
-        if (ids.isEmpty) return <Ride>[];
-        final List<Ride> rides = <Ride>[];
-        for (final String id in ids) {
-          final DocumentSnapshot<Map<String, dynamic>> doc =
-              await _rides.doc(id).get();
-          if (doc.exists) rides.add(Ride.fromDoc(doc));
-        }
-        rides.sort((Ride a, Ride b) => (b.createdAt ?? DateTime(0))
-            .compareTo(a.createdAt ?? DateTime(0)));
-        return rides;
-      },
-    );
+    return _rideRefs(uid).snapshots().asyncMap((
+      QuerySnapshot<Map<String, dynamic>> refs,
+    ) async {
+      final List<String> ids = refs.docs.map((d) => d.id).toList();
+      if (ids.isEmpty) return <Ride>[];
+      final List<Ride> rides = <Ride>[];
+      for (final String id in ids) {
+        final DocumentSnapshot<Map<String, dynamic>> doc = await _rides
+            .doc(id)
+            .get();
+        if (doc.exists) rides.add(Ride.fromDoc(doc));
+      }
+      rides.sort(
+        (Ride a, Ride b) =>
+            (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+      );
+      return rides;
+    });
   }
 
-  Stream<Ride?> watchRide(String id) => _rides
-      .doc(id)
-      .snapshots()
-      .map((d) => d.exists ? Ride.fromDoc(d) : null);
+  Stream<Ride?> watchRide(String id) =>
+      _rides.doc(id).snapshots().map((d) => d.exists ? Ride.fromDoc(d) : null);
 
   Stream<List<RideMember>> watchMembers(String id) => _rides
       .doc(id)
@@ -147,10 +162,14 @@ class RideService extends GetxService {
     final Ride? ride = await findByCode(code);
     if (ride == null) throw Exception('No ride found for that code.');
     if (!ride.isActive) throw Exception('That ride has ended.');
-    if (ride.createdBy == uid) throw Exception('You are the host of this ride.');
+    if (ride.createdBy == uid)
+      throw Exception('You are the host of this ride.');
 
-    final DocumentSnapshot<Map<String, dynamic>> memberDoc =
-        await _rides.doc(ride.id).collection('members').doc(uid).get();
+    final DocumentSnapshot<Map<String, dynamic>> memberDoc = await _rides
+        .doc(ride.id)
+        .collection('members')
+        .doc(uid)
+        .get();
     if (memberDoc.exists) throw Exception('You are already in this ride.');
 
     final profile = await _users.fetch(uid);
@@ -158,12 +177,14 @@ class RideService extends GetxService {
         .doc(ride.id)
         .collection('requests')
         .doc(uid)
-        .set(JoinRequest(
-          uid: uid,
-          name: profile?.name ?? 'Rider',
-          photoUrl: profile?.photoUrl,
-          status: 'pending',
-        ).toMap(isNew: true))
+        .set(
+          JoinRequest(
+            uid: uid,
+            name: profile?.name ?? 'Rider',
+            photoUrl: profile?.photoUrl,
+            status: 'pending',
+          ).toMap(isNew: true),
+        )
         .timeout(
           _timeout,
           onTimeout: () =>
@@ -182,11 +203,15 @@ class RideService extends GetxService {
     );
     final WriteBatch batch = _db.batch();
     batch.set(
-        rideRef.collection('members').doc(req.uid), member.toMap(isNew: true));
-    batch.update(rideRef.collection('requests').doc(req.uid),
-        <String, dynamic>{'status': 'accepted'});
-    batch.update(
-        rideRef, <String, dynamic>{'memberCount': FieldValue.increment(1)});
+      rideRef.collection('members').doc(req.uid),
+      member.toMap(isNew: true),
+    );
+    batch.update(rideRef.collection('requests').doc(req.uid), <String, dynamic>{
+      'status': 'accepted',
+    });
+    batch.update(rideRef, <String, dynamic>{
+      'memberCount': FieldValue.increment(1),
+    });
     batch.set(_rideRefs(req.uid).doc(rideId), <String, dynamic>{
       'rideId': rideId,
       'name': req.name,
@@ -195,10 +220,10 @@ class RideService extends GetxService {
       'joinedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit().timeout(
-          _timeout,
-          onTimeout: () =>
-              throw Exception('Accept timed out. Check your connection.'),
-        );
+      _timeout,
+      onTimeout: () =>
+          throw Exception('Accept timed out. Check your connection.'),
+    );
   }
 
   Future<void> rejectRequest(String rideId, String uid) => _rides
@@ -206,14 +231,15 @@ class RideService extends GetxService {
       .collection('requests')
       .doc(uid)
       .update(<String, dynamic>{'status': 'rejected'})
-      .timeout(_timeout,
-          onTimeout: () => throw Exception('Reject timed out.'));
+      .timeout(_timeout, onTimeout: () => throw Exception('Reject timed out.'));
 
   Future<void> endRide(String rideId) => _rides
       .doc(rideId)
       .update(<String, dynamic>{'status': 'ended'})
-      .timeout(_timeout,
-          onTimeout: () => throw Exception('End ride timed out.'));
+      .timeout(
+        _timeout,
+        onTimeout: () => throw Exception('End ride timed out.'),
+      );
 
   Future<void> leaveRide(String rideId) async {
     final String? uid = _auth.uid;
@@ -221,10 +247,13 @@ class RideService extends GetxService {
     final DocumentReference<Map<String, dynamic>> rideRef = _rides.doc(rideId);
     final WriteBatch batch = _db.batch();
     batch.delete(rideRef.collection('members').doc(uid));
-    batch.update(
-        rideRef, <String, dynamic>{'memberCount': FieldValue.increment(-1)});
+    batch.update(rideRef, <String, dynamic>{
+      'memberCount': FieldValue.increment(-1),
+    });
     batch.delete(_rideRefs(uid).doc(rideId));
-    await batch.commit().timeout(_timeout,
-        onTimeout: () => throw Exception('Leave timed out.'));
+    await batch.commit().timeout(
+      _timeout,
+      onTimeout: () => throw Exception('Leave timed out.'),
+    );
   }
 }

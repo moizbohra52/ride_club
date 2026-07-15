@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/member_location.dart';
+import '../../models/ride.dart';
 import '../../models/ride_member.dart';
 import '../../models/route_result.dart';
 import '../../routes/app_routes.dart';
@@ -43,16 +44,21 @@ class RideMapView extends GetView<RideMapController> {
                     child: Container(
                       padding: const EdgeInsets.all(3),
                       decoration: const BoxDecoration(
-                          color: AppColors.sos, shape: BoxShape.circle),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
+                        color: AppColors.sos,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
                       child: Text(
                         n > 9 ? '9+' : '$n',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold),
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -68,18 +74,20 @@ class RideMapView extends GetView<RideMapController> {
         if (controller.permissionError.value != null) {
           return _permissionError(context);
         }
-        final LatLng center = controller.myLatLng.value ??
+        final LatLng center =
+            controller.myLatLng.value ??
             const LatLng(20.5937, 78.9629); // India fallback
         final bool isDark = Theme.of(context).brightness == Brightness.dark;
-        final String tileUrl =
-            isDark ? AppConstants.osmTileUrlDark : AppConstants.osmTileUrl;
+        final String tileUrl = isDark
+            ? AppConstants.osmTileUrlDark
+            : AppConstants.osmTileUrl;
         return Stack(
           children: <Widget>[
             FlutterMap(
               mapController: controller.mapController,
               options: MapOptions(
                 initialCenter: center,
-                initialZoom: 14,
+                initialZoom: 16.5,
                 onPositionChanged: (MapCamera camera, bool hasGesture) {
                   if (hasGesture) controller.onMapDragged();
                 },
@@ -89,8 +97,8 @@ class RideMapView extends GetView<RideMapController> {
                   urlTemplate: tileUrl,
                   userAgentPackageName: AppConstants.userAgentPackageName,
                 ),
-                Obx(() => PolylineLayer(polylines: _routePolylines())),
-                Obx(() => MarkerLayer(markers: _markers(context))),
+                Obx(() => PolylineLayer(polylines: _routePolylines(isDark))),
+                Obx(() => MarkerLayer(markers: _markers(context, isDark))),
                 RichAttributionWidget(
                   attributions: <SourceAttribution>[
                     TextSourceAttribution(
@@ -153,11 +161,14 @@ class RideMapView extends GetView<RideMapController> {
                         heroTag: 'recenter',
                         backgroundColor: controller.isFollowing.value
                             ? Theme.of(context).colorScheme.primary
-                            : null,
+                            : Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
                         foregroundColor: controller.isFollowing.value
                             ? Theme.of(context).colorScheme.onPrimary
-                            : null,
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         onPressed: controller.recenter,
+                        elevation: controller.isFollowing.value ? 2 : 6,
                         child: const Icon(Icons.my_location_rounded),
                       ),
                     ),
@@ -197,43 +208,159 @@ class RideMapView extends GetView<RideMapController> {
     );
   }
 
-  List<Polyline> _routePolylines() {
+  /// Offsets a list of LatLng points by a small distance perpendicular to the route direction
+  List<LatLng> _offsetPoints(List<LatLng> points, double offsetMeters) {
+    if (points.length < 2) return points;
+
+    final List<LatLng> offsetPoints = <LatLng>[];
+    const Distance distance = Distance();
+
+    for (int i = 0; i < points.length; i++) {
+      LatLng current = points[i];
+      double bearing;
+
+      if (i == 0) {
+        // First point: use direction to next point
+        bearing = distance.bearing(points[i], points[i + 1]);
+      } else if (i == points.length - 1) {
+        // Last point: use direction from previous point
+        bearing = distance.bearing(points[i - 1], points[i]);
+      } else {
+        // Middle point: average of directions from previous and to next
+        final double b1 = distance.bearing(points[i - 1], points[i]);
+        final double b2 = distance.bearing(points[i], points[i + 1]);
+        bearing = (b1 + b2) / 2;
+      }
+
+      // Offset perpendicular to bearing (90 degrees clockwise)
+      final double offsetBearing = (bearing + 90) % 360;
+      final LatLng offsetPoint = distance.offset(
+        current,
+        offsetMeters,
+        offsetBearing,
+      );
+      offsetPoints.add(offsetPoint);
+    }
+
+    return offsetPoints;
+  }
+
+  List<Polyline> _routePolylines(bool isDark) {
     final List<Polyline> lines = <Polyline>[];
-    controller.memberRoutes.forEach((String uid, RouteResult route) {
+    final List<LatLng>? planned = controller.plannedRoute.value;
+
+    if (planned != null && planned.length >= 2) {
+      // Draw planned route background first
       lines.add(
         Polyline(
-          points: route.points,
-          color: AppColors.memberColorForKey(uid).withValues(alpha: 0.4),
-          strokeWidth: 3,
+          points: planned,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.4)
+              : AppColors.ink.withValues(alpha: 0.35),
+          strokeWidth: 6,
         ),
       );
-    });
-    final RouteResult? myR = controller.myRoute.value;
-    if (myR != null) {
+
+      // Draw current user's path on planned route
+      final Color myColor = isDark ? Colors.white : AppColors.seed;
       lines.add(
         Polyline(
-          points: myR.points,
-          color: AppColors.seed.withValues(alpha: 0.25),
+          points: planned,
+          color: myColor.withValues(alpha: isDark ? 0.4 : 0.25),
           strokeWidth: 12,
         ),
       );
-      lines.add(
-        Polyline(points: myR.points, color: AppColors.seed, strokeWidth: 6),
-      );
+      lines.add(Polyline(points: planned, color: myColor, strokeWidth: 6));
+
+      // Draw other members' paths on the same planned route with offsets
+      int memberIndex = 0;
+      final List<MemberLocation> otherMembers = controller.members
+          .where((MemberLocation m) => m.uid != controller.uid)
+          .toList();
+      for (final MemberLocation m in otherMembers) {
+        final Color memberColor = AppColors.memberColorForKey(m.uid);
+
+        // Calculate offset for this member (alternate left/right per member)
+        final double offsetAmount = memberIndex % 2 == 0
+            ? 5
+            : -5; // 5 meters offset, alternate direction
+        final List<LatLng> offsetPoints = _offsetPoints(planned, offsetAmount);
+
+        lines.add(
+          Polyline(
+            points: offsetPoints,
+            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
+            strokeWidth: 10,
+          ),
+        );
+        lines.add(
+          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+        );
+        memberIndex++;
+      }
+    } else {
+      // Fallback: draw individual routes when no planned route exists
+      final RouteResult? myR = controller.myRoute.value;
+      if (myR != null) {
+        lines.add(
+          Polyline(
+            points: myR.points,
+            color: isDark
+                ? AppColors.seed.withValues(alpha: 0.4)
+                : AppColors.seed.withValues(alpha: 0.25),
+            strokeWidth: 12,
+          ),
+        );
+        lines.add(
+          Polyline(
+            points: myR.points,
+            color: isDark ? Colors.white : AppColors.seed,
+            strokeWidth: 6,
+          ),
+        );
+      }
+      int memberIndex = 0;
+      controller.memberRoutes.forEach((String uid, RouteResult route) {
+        final Color memberColor = AppColors.memberColorForKey(uid);
+
+        // Calculate offset for this member (alternate left/right per member)
+        final double offsetAmount = memberIndex % 2 == 0
+            ? 5
+            : -5; // 5 meters offset, alternate direction
+        final List<LatLng> offsetPoints = _offsetPoints(
+          route.points,
+          offsetAmount,
+        );
+
+        lines.add(
+          Polyline(
+            points: offsetPoints,
+            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
+            strokeWidth: 10,
+          ),
+        );
+        lines.add(
+          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+        );
+        memberIndex++;
+      });
     }
     return lines;
   }
 
-  List<Marker> _routeArrows() {
-    final RouteResult? myR = controller.myRoute.value;
-    if (myR == null || myR.points.length < 2) return <Marker>[];
+  List<Marker> _routeArrows(bool isDark) {
+    final List<LatLng>? planned = controller.plannedRoute.value;
+    final List<LatLng>? points = planned != null && planned.length >= 2
+        ? planned
+        : controller.myRoute.value?.points;
+    if (points == null || points.length < 2) return <Marker>[];
     final double counterRotation =
         -controller.mapController.camera.rotation * (math.pi / 180);
     final List<Marker> arrows = <Marker>[];
     const int step = 10; // ~1 arrow per 10 route points
-    for (int i = step; i < myR.points.length; i += step) {
-      final LatLng a = myR.points[i - 1];
-      final LatLng b = myR.points[i];
+    for (int i = step; i < points.length; i += step) {
+      final LatLng a = points[i - 1];
+      final LatLng b = points[i];
       final double bearing = _bearing(a, b);
       arrows.add(
         Marker(
@@ -244,7 +371,7 @@ class RideMapView extends GetView<RideMapController> {
             angle: counterRotation + (bearing * math.pi / 180),
             child: Icon(
               Icons.navigation_rounded,
-              color: AppColors.seed,
+              color: isDark ? Colors.white : AppColors.seed,
               size: 18,
             ),
           ),
@@ -259,7 +386,8 @@ class RideMapView extends GetView<RideMapController> {
     final double lat2 = to.latitude * math.pi / 180;
     final double dLon = (to.longitude - from.longitude) * math.pi / 180;
     final double y = math.sin(dLon) * math.cos(lat2);
-    final double x = math.cos(lat1) * math.sin(lat2) -
+    final double x =
+        math.cos(lat1) * math.sin(lat2) -
         math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
     final double deg = math.atan2(y, x) * 180 / math.pi;
     return (deg + 360) % 360;
@@ -283,12 +411,16 @@ class RideMapView extends GetView<RideMapController> {
         elevation: 6,
         shadowColor: AppColors.primaryGlow.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
-        color: isDark ? scheme.surfaceContainerHigh.withValues(alpha: 0.9) : scheme.surface.withValues(alpha: 0.9),
+        color: isDark
+            ? scheme.surfaceContainerHigh.withValues(alpha: 0.9)
+            : scheme.surface.withValues(alpha: 0.9),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.15),
+              color: scheme.outlineVariant.withValues(
+                alpha: isDark ? 0.3 : 0.15,
+              ),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -324,38 +456,38 @@ class RideMapView extends GetView<RideMapController> {
   }
 
   Widget _sosBanner() => Material(
-        color: AppColors.sos,
-        elevation: 6,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: controller.cancelSos,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            child: Row(
-              children: <Widget>[
-                const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'SOS active · Tap to cancel',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
+    color: AppColors.sos,
+    elevation: 6,
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: controller.cancelSos,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'SOS active · Tap to cancel',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
-  List<Marker> _markers(BuildContext context) {
+  List<Marker> _markers(BuildContext context, bool isDark) {
     final List<Marker> markers = <Marker>[];
-    final double counterRotation = -controller.mapController.camera.rotation *
-        (math.pi / 180);
+    final double counterRotation =
+        -controller.mapController.camera.rotation * (math.pi / 180);
 
     // Always show your own location as a marker
     final LatLng? me = controller.myLatLng.value;
@@ -388,7 +520,8 @@ class RideMapView extends GetView<RideMapController> {
       if (m.uid == controller.uid) continue; // Don't duplicate the "me" marker
       final RideMember? profile = controller.rideMemberFor(m.uid);
       final RouteResult? route = controller.routeFor(m.uid);
-      final RideMember resolved = profile ??
+      final RideMember resolved =
+          profile ??
           RideMember(
             uid: m.uid,
             name: 'Rider',
@@ -424,19 +557,43 @@ class RideMapView extends GetView<RideMapController> {
         ),
       );
     }
-    final LatLng? dest = controller.destination.value;
-    if (dest != null) {
+    final List<RideDestination> stops = controller.orderedStops;
+    for (int i = 0; i < stops.length; i++) {
+      final RideDestination s = stops[i];
+      final bool isFirst = i == 0;
+      final bool isLast = i == stops.length - 1;
+      final Widget pin;
+      if (isFirst && stops.length > 1) {
+        pin = const Icon(Icons.trip_origin, color: AppColors.success, size: 30);
+      } else if (isLast) {
+        pin = const Icon(Icons.flag_rounded, color: AppColors.sos, size: 36);
+      } else {
+        pin = Container(
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.seed,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '$i', // waypoints are 1..n-1 (origin is index 0)
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+        );
+      }
       markers.add(
         Marker(
-          point: dest,
+          point: LatLng(s.lat, s.lng),
           width: 44,
           height: 44,
-          child:
-              const Icon(Icons.flag_rounded, color: AppColors.sos, size: 36),
+          child: Transform.rotate(angle: counterRotation, child: pin),
         ),
       );
     }
-    markers.addAll(_routeArrows());
+    markers.addAll(_routeArrows(isDark));
     return markers;
   }
 
@@ -448,7 +605,9 @@ class RideMapView extends GetView<RideMapController> {
       elevation: 6,
       shadowColor: Colors.black.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(18),
-      color: isDark ? scheme.surfaceContainerHigh.withValues(alpha: 0.9) : scheme.surface.withValues(alpha: 0.9),
+      color: isDark
+          ? scheme.surfaceContainerHigh.withValues(alpha: 0.9)
+          : scheme.surface.withValues(alpha: 0.9),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () => _showMembers(context),
@@ -456,7 +615,9 @@ class RideMapView extends GetView<RideMapController> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.15),
+              color: scheme.outlineVariant.withValues(
+                alpha: isDark ? 0.3 : 0.15,
+              ),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -500,14 +661,15 @@ class RideMapView extends GetView<RideMapController> {
                     ? ''
                     : ' · ${route.distanceText} · ${route.etaText}';
                 final RideMember? profile = controller.rideMemberFor(m.uid);
-                final String displayName = profile?.name ??
+                final String displayName =
+                    profile?.name ??
                     (m.uid == controller.uid ? 'You' : 'Rider');
-                final RideMember resolvedMember = profile ??
+                final RideMember resolvedMember =
+                    profile ??
                     RideMember(
                       uid: m.uid,
                       name: displayName,
-                      colorValue:
-                          AppColors.memberColorForKey(m.uid).toARGB32(),
+                      colorValue: AppColors.memberColorForKey(m.uid).toARGB32(),
                       role: 'rider',
                     );
 
@@ -518,11 +680,19 @@ class RideMapView extends GetView<RideMapController> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     leading: CircleAvatar(
-                      backgroundColor: AppColors.memberColorForKey(m.uid).withValues(alpha: 0.15),
+                      backgroundColor: AppColors.memberColorForKey(
+                        m.uid,
+                      ).withValues(alpha: 0.15),
                       radius: 16,
-                      child: Icon(Icons.person, color: AppColors.memberColorForKey(m.uid)),
+                      child: Icon(
+                        Icons.person,
+                        color: AppColors.memberColorForKey(m.uid),
+                      ),
                     ),
                     title: Text(
                       displayName,
@@ -566,12 +736,19 @@ class RideMapView extends GetView<RideMapController> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.location_off_rounded, size: 56, color: AppColors.sos),
+            const Icon(
+              Icons.location_off_rounded,
+              size: 56,
+              color: AppColors.sos,
+            ),
             const SizedBox(height: 16),
             Text(
               controller.permissionError.value!,
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w500),
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 24),
             FilledButton(
@@ -655,9 +832,8 @@ class _MemberPin extends StatelessWidget {
                             fit: BoxFit.cover,
                             placeholder: (BuildContext c, String u) =>
                                 Container(color: color.withValues(alpha: 0.15)),
-                            errorWidget:
-                                (BuildContext c, String u, Object e) =>
-                                    _initialAvatar(),
+                            errorWidget: (BuildContext c, String u, Object e) =>
+                                _initialAvatar(),
                           )
                         : _initialAvatar(),
                   ),
@@ -694,17 +870,17 @@ class _MemberPin extends StatelessWidget {
   }
 
   Widget _initialAvatar() => Container(
-        color: color.withValues(alpha: 0.15),
-        alignment: Alignment.center,
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: GoogleFonts.poppins(
-            color: color,
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-          ),
-        ),
-      );
+    color: color.withValues(alpha: 0.15),
+    alignment: Alignment.center,
+    child: Text(
+      name.isNotEmpty ? name[0].toUpperCase() : '?',
+      style: GoogleFonts.poppins(
+        color: color,
+        fontWeight: FontWeight.w700,
+        fontSize: 16,
+      ),
+    ),
+  );
 }
 
 /// Small direction triangle drawn at the top of the pin (points "up" at

@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 import 'app_radius.dart';
 
-/// Material 3 light & dark themes for RideTogether.
+/// Material 3 light & dark themes for RideClub.
 ///
 /// Both themes are generated from a single [AppColors.seed] so the palette stays
 /// consistent, then customized for inputs, cards, buttons, and app bars.
@@ -92,32 +92,53 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        floatingLabelBehavior: FloatingLabelBehavior.auto,
+        floatingLabelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          color: scheme.primary,
+        ),
         border: OutlineInputBorder(
-          borderRadius: AppRadius.mdRadius,
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: AppRadius.lgRadius,
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: AppRadius.mdRadius,
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: AppRadius.lgRadius,
+          borderSide: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: AppRadius.mdRadius,
+          borderRadius: AppRadius.lgRadius,
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: AppRadius.mdRadius,
-          borderSide: BorderSide(color: scheme.error),
+          borderRadius: AppRadius.lgRadius,
+          borderSide: BorderSide(color: scheme.error, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: AppRadius.mdRadius,
+          borderRadius: AppRadius.lgRadius,
           borderSide: BorderSide(color: scheme.error, width: 2),
         ),
-        labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w500,
+          color: scheme.onSurfaceVariant,
+        ),
         hintStyle: GoogleFonts.poppins(
-          color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+        ),
+        prefixIconColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.focused)
+              ? scheme.primary
+              : scheme.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+        suffixIconColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.focused)
+              ? scheme.primary
+              : scheme.onSurfaceVariant.withValues(alpha: 0.7),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -19,8 +20,9 @@ class UserService extends GetxService {
   /// Fetch a profile once. Returns null if the doc doesn't exist.
   Future<AppUser?> fetch(String uid) async {
     try {
-      final DocumentSnapshot<Map<String, dynamic>> doc =
-          await _users.doc(uid).get();
+      final DocumentSnapshot<Map<String, dynamic>> doc = await _users
+          .doc(uid)
+          .get();
       if (!doc.exists) return null;
       return AppUser.fromDoc(doc);
     } catch (e, s) {
@@ -31,7 +33,10 @@ class UserService extends GetxService {
 
   /// Live profile stream (used when the profile can change elsewhere).
   Stream<AppUser?> watch(String uid) {
-    return _users.doc(uid).snapshots().map(
+    return _users
+        .doc(uid)
+        .snapshots()
+        .map(
           (DocumentSnapshot<Map<String, dynamic>> d) =>
               d.exists ? AppUser.fromDoc(d) : null,
         );
@@ -63,12 +68,13 @@ class UserService extends GetxService {
 
   /// Upload a profile photo to `profile_photos/{uid}.jpg` and return its URL.
   Future<String> uploadProfilePhoto(String uid, File file) async {
-    final Reference ref = _storage.ref('profile_photos/$uid.jpg');
-    final UploadTask task = ref.putFile(
-      file,
+    final Reference ref = _storage.ref("profile_photos/$uid.jpg");
+    final Uint8List bytes = await file.readAsBytes();
+    final UploadTask task = ref.putData(
+      bytes,
       SettableMetadata(contentType: 'image/jpeg'),
     );
     final TaskSnapshot snap = await task;
-    return snap.ref.getDownloadURL();
+    return await snap.ref.getDownloadURL();
   }
 }

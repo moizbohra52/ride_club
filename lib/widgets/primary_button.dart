@@ -75,13 +75,17 @@ class _PrimaryButtonState extends State<PrimaryButton>
                 },
           onTapCancel: disabled ? null : () => _scaleCtrl.reverse(),
           child: Container(
-            height: 56,
+            height: 60,
             decoration: BoxDecoration(
               gradient: disabled
                   ? null
-                  : const LinearGradient(colors: AppColors.brandGradient),
+                  : const LinearGradient(
+                      colors: AppColors.brandGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
               color: disabled ? scheme.onSurface.withValues(alpha: 0.12) : null,
-              borderRadius: AppRadius.mdRadius,
+              borderRadius: AppRadius.lgRadius,
               boxShadow: disabled
                   ? null
                   : AppElevation.medium(AppColors.seed),
@@ -89,10 +93,10 @@ class _PrimaryButtonState extends State<PrimaryButton>
             child: Center(
               child: widget.loading
                   ? const SizedBox(
-                      height: 22,
-                      width: 22,
+                      height: 24,
+                      width: 24,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
+                        strokeWidth: 3,
                         color: Colors.white,
                       ),
                     )
@@ -100,15 +104,16 @@ class _PrimaryButtonState extends State<PrimaryButton>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
                         if (widget.icon != null) ...<Widget>[
-                          Icon(widget.icon, size: 20, color: Colors.white),
-                          const SizedBox(width: 8),
+                          Icon(widget.icon, size: 22, color: Colors.white),
+                          const SizedBox(width: 10),
                         ],
                         Text(
                           widget.label,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],
@@ -136,25 +141,34 @@ class _PrimaryButtonState extends State<PrimaryButton>
           decoration: disabled
               ? null
               : BoxDecoration(
-                  borderRadius: AppRadius.mdRadius,
+                  borderRadius: AppRadius.lgRadius,
                   boxShadow: AppElevation.soft(AppColors.seed),
                 ),
           child: FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(60),
+            ),
             onPressed: disabled ? null : widget.onPressed,
             child: widget.loading
                 ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 3),
                   )
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       if (widget.icon != null) ...<Widget>[
-                        Icon(widget.icon, size: 20),
-                        const SizedBox(width: 8),
+                        Icon(widget.icon, size: 22),
+                        const SizedBox(width: 10),
                       ],
-                      Text(widget.label),
+                      Text(
+                        widget.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
                     ],
                   ),
           ),

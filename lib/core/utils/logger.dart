@@ -7,11 +7,16 @@ import 'package:flutter/foundation.dart';
 class Log {
   Log._();
 
-  static void d(Object? message, {String tag = 'RideTogether'}) {
+  static void d(Object? message, {String tag = 'RideClub'}) {
     if (kDebugMode) debugPrint('[$tag] $message');
   }
 
-  static void e(Object? message, {Object? error, StackTrace? stack, String tag = 'RideTogether'}) {
+  static void e(
+    Object? message, {
+    Object? error,
+    StackTrace? stack,
+    String tag = 'RideClub',
+  }) {
     if (kDebugMode) {
       debugPrint('[$tag] ERROR: $message');
       if (error != null) debugPrint('[$tag]   $error');

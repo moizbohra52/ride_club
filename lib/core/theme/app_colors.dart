@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Central color palette for RideTogether.
+/// Central color palette for RideClub.
 ///
 /// [seed] drives the Material 3 [ColorScheme] for both light and dark themes.
 /// [memberColors] are assigned round-robin to ride members so each rider gets a

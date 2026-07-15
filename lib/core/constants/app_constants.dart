@@ -5,17 +5,16 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'RideTogether';
+  static const String appName = 'RideClub';
 
   /// Package name reported to OSM tile servers (flutter_map policy).
   static const String userAgentPackageName = 'com.ridetogether.app';
 
   /// Contact for Nominatim/Overpass User-Agent (OSM usage policy).
-  static const String contactEmail = 'support@ridetogether.app';
+  static const String contactEmail = 'support@rideclub.app';
 
   /// Full User-Agent string for Nominatim/Overpass HTTP requests.
-  static const String httpUserAgent =
-      '$appName/1.0 ($contactEmail)';
+  static const String httpUserAgent = '$appName/1.0 ($contactEmail)';
 
   // --- Map / tiles (used from Phase 3) ---
   static const String osmTileUrl =
@@ -47,7 +46,7 @@ class AppConstants {
   static const int rideCodeLength = 6;
 
   /// Deep link base used for shareable ride invites (Phase 2).
-  static const String inviteLinkBase = 'https://ridetogether.app/join';
+  static const String inviteLinkBase = 'https://rideclub.app/join';
 
   // --- GetStorage keys ---
   static const String kThemeMode = 'theme_mode';

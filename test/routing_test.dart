@@ -56,4 +56,31 @@ void main() {
     expect(r!.distanceMeters, 42300.0);
     expect(r.points.length, 3);
   });
+
+  test('routeMulti builds a multi-coordinate OSRM request', () async {
+    late Uri captured;
+    final MockClient mock = MockClient((http.Request req) async {
+      captured = req.url;
+      return http.Response(
+        '{"code":"Ok","routes":[{"distance":100.0,"duration":60.0,'
+        '"geometry":"_p~iF~ps|U_ulLnnqC_mqNvxq`@"}]}',
+        200,
+      );
+    });
+    final RoutingService svc = RoutingService();
+    final RouteResult? r = await svc.routeMulti(
+      const <LatLng>[LatLng(1, 2), LatLng(3, 4), LatLng(5, 6)],
+      client: mock,
+    );
+    expect(r, isNotNull);
+    // Three ";"-separated "lng,lat" pairs in the path.
+    expect(captured.path, contains('2.0,1.0;4.0,3.0;6.0,5.0'));
+  });
+
+  test('routeMulti returns null for fewer than two stops', () async {
+    final RoutingService svc = RoutingService();
+    final RouteResult? r =
+        await svc.routeMulti(const <LatLng>[LatLng(1, 2)]);
+    expect(r, isNull);
+  });
 }

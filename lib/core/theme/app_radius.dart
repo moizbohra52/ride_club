@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Shared corner-radius scale for RideTogether.
+/// Shared corner-radius scale for RideClub.
 ///
 /// sm = chips/small badges, md = inputs/buttons/list tiles, lg = cards,
 /// xl = sheets/dialogs/hero blocks.
@@ -12,12 +12,8 @@ class AppRadius {
   static const double lg = 18;
   static const double xl = 24;
 
-  static const BorderRadius smRadius =
-      BorderRadius.all(Radius.circular(sm));
-  static const BorderRadius mdRadius =
-      BorderRadius.all(Radius.circular(md));
-  static const BorderRadius lgRadius =
-      BorderRadius.all(Radius.circular(lg));
-  static const BorderRadius xlRadius =
-      BorderRadius.all(Radius.circular(xl));
+  static const BorderRadius smRadius = BorderRadius.all(Radius.circular(sm));
+  static const BorderRadius mdRadius = BorderRadius.all(Radius.circular(md));
+  static const BorderRadius lgRadius = BorderRadius.all(Radius.circular(lg));
+  static const BorderRadius xlRadius = BorderRadius.all(Radius.circular(xl));
 }

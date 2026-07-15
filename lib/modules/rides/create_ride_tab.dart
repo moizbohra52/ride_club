@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/place_result.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/primary_button.dart';
 import 'create_ride_controller.dart';
@@ -13,7 +14,6 @@ class CreateRideTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final CreateRideController c = Get.put(CreateRideController());
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     return Obx(
       () => LoadingOverlay(
         isLoading: c.creating.value,
@@ -25,7 +25,6 @@ class CreateRideTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                // Section header
                 Row(
                   children: <Widget>[
                     Container(
@@ -60,111 +59,57 @@ class CreateRideTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: c.destField,
-                  onChanged: c.onSearchChanged,
-                  decoration: InputDecoration(
-                    labelText: 'Destination (optional)',
-                    hintText: 'Search a place',
-                    prefixIcon: const Icon(Icons.place_outlined),
-                    suffixIcon: c.searching.value
-                        ? const Padding(
-                            padding: EdgeInsets.all(14),
-                            child: SizedBox(
-                              height: 18,
-                              width: 18,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...c.suggestions.map(
-                  (p) => Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? scheme.surfaceContainerHigh
-                          : scheme.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: scheme.outlineVariant
-                            .withValues(alpha: isDark ? 0.3 : 0.15),
-                      ),
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: isDark
-                              ? Colors.black.withValues(alpha: 0.2)
-                              : AppColors.primaryGlow.withValues(alpha: 0.06),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      leading: Container(
-                        height: 36,
-                        width: 36,
-                        decoration: BoxDecoration(
-                          color:
-                              scheme.primaryContainer.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(Icons.location_on_outlined,
-                            size: 18, color: scheme.primary),
-                      ),
-                      title: Text(
-                        p.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      onTap: () => c.choose(p),
-                    ),
-                  ),
-                ),
-                if (c.chosen.value != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.success.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          Icon(Icons.check_circle,
-                              color: AppColors.success, size: 20),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Destination set',
-                              style: GoogleFonts.poppins(
-                                color: AppColors.success,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                _stopField(context, c, c.origin,
+                    label: 'Origin (optional)', icon: Icons.trip_origin),
+                const SizedBox(height: 12),
+                // Waypoints (reorderable).
+                Obx(
+                  () => ReorderableListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    itemCount: c.waypoints.length,
+                    onReorder: c.reorderWaypoints,
+                    itemBuilder: (BuildContext ctx, int i) {
+                      final StopEditor e = c.waypoints[i];
+                      return Padding(
+                        key: ValueKey<StopEditor>(e),
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: <Widget>[
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: const Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Icon(Icons.drag_handle_rounded),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
+                            Expanded(
+                              child: _stopField(context, c, e,
+                                  label: 'Stop ${i + 1}',
+                                  icon: Icons.place_outlined),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => c.removeWaypoint(i),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: c.addWaypoint,
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Add stop'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _stopField(context, c, c.destination,
+                    label: 'Destination (optional)', icon: Icons.flag_outlined),
                 const SizedBox(height: 28),
                 PrimaryButton(
                   label: 'Create ride',
@@ -175,6 +120,83 @@ class CreateRideTab extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _stopField(
+    BuildContext context,
+    CreateRideController c,
+    StopEditor e, {
+    required String label,
+    required IconData icon,
+  }) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Obx(
+      () => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          TextField(
+            controller: e.field,
+            onChanged: (String q) => c.onSearchChanged(e, q),
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: 'Search a place',
+              prefixIcon: Icon(icon, size: 22),
+              suffixIcon: e.searching.value
+                  ? const Padding(
+                      padding: EdgeInsets.all(14),
+                      child: SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    )
+                  : (e.chosen.value != null
+                      ? const Icon(Icons.check_circle_rounded,
+                          color: AppColors.success, size: 26)
+                      : null),
+            ),
+          ),
+          ...e.suggestions.map(
+            (PlaceResult p) => Container(
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: scheme.outlineVariant
+                      .withValues(alpha: isDark ? 0.35 : 0.2),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                leading: Icon(Icons.location_on_outlined,
+                    size: 20, color: scheme.primary),
+                title: Text(
+                  p.displayName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                onTap: () => c.choose(e, p),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

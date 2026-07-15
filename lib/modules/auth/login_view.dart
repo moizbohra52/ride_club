@@ -26,10 +26,7 @@ class LoginView extends GetView<AuthController> {
           child: Column(
             children: <Widget>[
               // ---- Hero: horizon gradient + route motif ----
-              Expanded(
-                flex: 5,
-                child: _HorizonHero(),
-              ),
+              Expanded(flex: 5, child: _HorizonHero()),
               // ---- Sign-in card ----
               Expanded(
                 flex: 4,
@@ -48,10 +45,9 @@ class LoginView extends GetView<AuthController> {
                         Text(
                           'See every friend on the map, chat live, and never '
                           'lose the group on the road.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(fontSize: 15),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(fontSize: 15),
                         ),
                         const Spacer(),
                         _GoogleButton(onPressed: controller.signInWithGoogle),
@@ -60,10 +56,9 @@ class LoginView extends GetView<AuthController> {
                           'We only use your Google name and photo to show you '
                           'to your ride group.',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(letterSpacing: 0),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.labelSmall?.copyWith(letterSpacing: 0),
                         ),
                       ],
                     ),
@@ -95,9 +90,7 @@ class _HorizonHero extends StatelessWidget {
         fit: StackFit.expand,
         children: <Widget>[
           // Faint route + pins painted behind the wordmark.
-          Positioned.fill(
-            child: CustomPaint(painter: _RouteMotifPainter()),
-          ),
+          Positioned.fill(child: CustomPaint(painter: _RouteMotifPainter())),
           // Subtle radial glow behind content.
           Positioned.fill(
             child: DecoratedBox(
@@ -133,12 +126,15 @@ class _HorizonHero extends StatelessWidget {
                             color: Colors.white.withValues(alpha: 0.35),
                           ),
                         ),
-                        child: const Icon(Icons.explore_rounded,
-                            color: Colors.white, size: 24),
+                        child: const Icon(
+                          Icons.explore_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'RideTogether',
+                        'RideClub',
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 20,
@@ -198,34 +194,56 @@ class _RouteMotifPainter extends CustomPainter {
     final Path path = Path()
       ..moveTo(size.width * 0.12, size.height * 0.78)
       ..cubicTo(
-        size.width * 0.35, size.height * 0.62,
-        size.width * 0.30, size.height * 0.42,
-        size.width * 0.55, size.height * 0.38,
+        size.width * 0.35,
+        size.height * 0.62,
+        size.width * 0.30,
+        size.height * 0.42,
+        size.width * 0.55,
+        size.height * 0.38,
       )
       ..cubicTo(
-        size.width * 0.82, size.height * 0.33,
-        size.width * 0.78, size.height * 0.16,
-        size.width * 0.92, size.height * 0.10,
+        size.width * 0.82,
+        size.height * 0.33,
+        size.width * 0.78,
+        size.height * 0.16,
+        size.width * 0.92,
+        size.height * 0.10,
       );
 
     // Dashed stroke.
     _drawDashed(canvas, path, route, dash: 12, gap: 9);
 
     // Start & end pins.
-    _pin(canvas, Offset(size.width * 0.12, size.height * 0.78), 7,
-        Colors.white.withValues(alpha: 0.9));
-    _pin(canvas, Offset(size.width * 0.92, size.height * 0.10), 7,
-        AppColors.sunset);
+    _pin(
+      canvas,
+      Offset(size.width * 0.12, size.height * 0.78),
+      7,
+      Colors.white.withValues(alpha: 0.9),
+    );
+    _pin(
+      canvas,
+      Offset(size.width * 0.92, size.height * 0.10),
+      7,
+      AppColors.sunset,
+    );
   }
 
   void _pin(Canvas canvas, Offset c, double r, Color color) {
     canvas.drawCircle(
-        c, r + 4, Paint()..color = Colors.white.withValues(alpha: 0.25));
+      c,
+      r + 4,
+      Paint()..color = Colors.white.withValues(alpha: 0.25),
+    );
     canvas.drawCircle(c, r, Paint()..color = color);
   }
 
-  void _drawDashed(Canvas canvas, Path source, Paint paint,
-      {required double dash, required double gap}) {
+  void _drawDashed(
+    Canvas canvas,
+    Path source,
+    Paint paint, {
+    required double dash,
+    required double gap,
+  }) {
     for (final ui in source.computeMetrics()) {
       double dist = 0;
       while (dist < ui.length) {
@@ -261,9 +279,10 @@ class _GoogleButtonState extends State<_GoogleButton>
       vsync: this,
       duration: const Duration(milliseconds: 100),
     );
-    _scale = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -367,10 +386,7 @@ class _GoogleGlyphPainter extends CustomPainter {
     arc(90, -80, const Color(0xFF4285F4)); // blue
 
     final Paint bar = Paint()..color = const Color(0xFF4285F4);
-    canvas.drawRect(
-      Rect.fromLTWH(w * 0.52, h * 0.42, w * 0.46, stroke),
-      bar,
-    );
+    canvas.drawRect(Rect.fromLTWH(w * 0.52, h * 0.42, w * 0.46, stroke), bar);
   }
 
   @override

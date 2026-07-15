@@ -1,11 +1,11 @@
 {
-    "name": "ride_club",
-    "short_name": "ride_club",
+    "name": "RideClub",
+    "short_name": "RideClub",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A1A2E",
+    "theme_color": "#E94560",
+    "description": "Group ride tracking with live location & chat — RideClub.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

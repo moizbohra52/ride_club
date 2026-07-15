@@ -83,9 +83,7 @@ class RideDetailController extends GetxController {
   void share() {
     final Ride? r = ride.value;
     if (r == null) return;
-    Share.share(
-      'Join my RideTogether ride "${r.name}" with code: ${r.code}',
-    );
+    Share.share('Join my RideClub ride "${r.name}" with code: ${r.code}');
   }
 
   Future<void> _guard(Future<void> Function() action) async {

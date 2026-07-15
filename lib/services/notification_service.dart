@@ -22,18 +22,18 @@ class NotificationService extends GetxService {
 
   static const AndroidNotificationChannel _sosChannel =
       AndroidNotificationChannel(
-    'sos',
-    'SOS Alerts',
-    description: 'Emergency alerts from your ride',
-    importance: Importance.max,
-  );
+        'sos',
+        'SOS Alerts',
+        description: 'Emergency alerts from your ride',
+        importance: Importance.max,
+      );
   static const AndroidNotificationChannel _generalChannel =
       AndroidNotificationChannel(
-    'general',
-    'General',
-    description: 'Ride updates',
-    importance: Importance.high,
-  );
+        'general',
+        'General',
+        description: 'Ride updates',
+        importance: Importance.high,
+      );
 
   Future<void> init() async {
     if (_initialized) {
@@ -49,9 +49,10 @@ class NotificationService extends GetxService {
         const InitializationSettings(android: android, iOS: ios),
       );
 
-      final AndroidFlutterLocalNotificationsPlugin? androidImpl =
-          _local.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+      final AndroidFlutterLocalNotificationsPlugin? androidImpl = _local
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       await androidImpl?.createNotificationChannel(_sosChannel);
       await androidImpl?.createNotificationChannel(_generalChannel);
       await androidImpl?.requestNotificationsPermission();
@@ -63,7 +64,7 @@ class NotificationService extends GetxService {
       FirebaseMessaging.onMessage.listen((RemoteMessage m) {
         final RemoteNotification? n = m.notification;
         if (n != null) {
-          showLocal(n.title ?? 'RideTogether', n.body ?? '');
+          showLocal(n.title ?? 'RideClub', n.body ?? '');
         }
       });
     } catch (e, s) {

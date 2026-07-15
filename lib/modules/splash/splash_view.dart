@@ -10,11 +10,7 @@ class SplashView extends GetView<SplashController> {
   Widget build(BuildContext context) {
     // Reference the controller so it's instantiated and routing kicks off.
     controller;
-    return Scaffold(
-      body: SafeArea(
-        child: _SplashBody(),
-      ),
-    );
+    return Scaffold(body: SafeArea(child: _SplashBody()));
   }
 }
 
@@ -39,9 +35,10 @@ class _SplashBodyState extends State<_SplashBody>
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
 
-    _pulseAnim = Tween<double>(begin: 0.95, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 0.95,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
     _fadeCtrl = AnimationController(
       vsync: this,
@@ -85,19 +82,14 @@ class _SplashBodyState extends State<_SplashBody>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                // Pulsating logo
+                // Pulsating logo — using the generated app logo
                 ScaleTransition(
                   scale: _pulseAnim,
                   child: Container(
-                    height: 110,
-                    width: 110,
+                    height: 130,
+                    width: 130,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: AppColors.brandGradient,
-                      ),
-                      borderRadius: BorderRadius.circular(32),
+                      shape: BoxShape.circle,
                       boxShadow: <BoxShadow>[
                         BoxShadow(
                           color: AppColors.primaryGlow,
@@ -106,16 +98,19 @@ class _SplashBodyState extends State<_SplashBody>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.travel_explore_rounded,
-                      size: 56,
-                      color: Colors.white,
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/icons/ride-club-logo.png',
+                        fit: BoxFit.cover,
+                        width: 130,
+                        height: 130,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'RideTogether',
+                  'RideClub',
                   style: Theme.of(context).textTheme.headlineLarge,
                 ),
                 const SizedBox(height: 8),

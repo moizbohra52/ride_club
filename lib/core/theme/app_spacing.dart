@@ -1,4 +1,4 @@
-/// Shared spacing scale for RideTogether. Use these instead of hand-picked
+/// Shared spacing scale for RideClub. Use these instead of hand-picked
 /// EdgeInsets/SizedBox numbers so spacing stays consistent across screens.
 class AppSpacing {
   AppSpacing._();
