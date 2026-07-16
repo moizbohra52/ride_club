@@ -7,6 +7,9 @@ import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/skeleton.dart';
+import '../../widgets/stagger_list.dart';
 import '../../widgets/status_badge.dart';
 import 'rides_shell_controller.dart';
 
@@ -19,107 +22,88 @@ class MyRidesTab extends StatelessWidget {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final String? uid = Get.find<AuthService>().uid;
     return Obx(() {
-      if (c.loading.value) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (c.myRides.isEmpty) return _empty(context, scheme);
-      return ListView.separated(
+      if (c.loading.value) return _loading();
+      if (c.myRides.isEmpty) return _empty(context, scheme, c);
+      return StaggerList(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        itemCount: c.myRides.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (_, int i) {
-          final Ride r = c.myRides[i];
-          final bool host = uid != null && r.isHost(uid);
-          return _AnimatedRideCard(
-            index: i,
-            child: _RideCard(ride: r, isHost: host),
-          );
-        },
+        spacing: 12,
+        children: <Widget>[
+          for (final Ride r in c.myRides)
+            _RideCard(ride: r, isHost: uid != null && r.isHost(uid)),
+        ],
       );
     });
   }
 
-  Widget _empty(BuildContext context, ColorScheme scheme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              height: 80,
-              width: 80,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(Icons.route_rounded,
-                  size: 40, color: scheme.onPrimaryContainer),
-            ),
-            const SizedBox(height: 20),
-            Text('No rides yet',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(
-              'Create a ride or join one with a code to get started.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
+  Widget _loading() {
+    return SkeletonScope(
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        itemCount: 4,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (_, _) => const AppCard(child: SkeletonListTile()),
       ),
     );
   }
-}
 
-/// Staggered fade+slide animation for each card in the list.
-class _AnimatedRideCard extends StatefulWidget {
-  final int index;
-  final Widget child;
-  const _AnimatedRideCard({required this.index, required this.child});
-
-  @override
-  State<_AnimatedRideCard> createState() => _AnimatedRideCardState();
-}
-
-class _AnimatedRideCardState extends State<_AnimatedRideCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _fade;
-  late final Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
-
-    // Stagger based on index.
-    Future<void>.delayed(Duration(milliseconds: 60 * widget.index), () {
-      if (mounted) _ctrl.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(
-        position: _slide,
-        child: widget.child,
+  Widget _empty(
+    BuildContext context,
+    ColorScheme scheme,
+    RidesShellController c,
+  ) {
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+        builder: (BuildContext context, double t, Widget? child) => Opacity(
+          opacity: t,
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 16),
+            child: child,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                height: 80,
+                width: 80,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Icon(
+                  Icons.route_rounded,
+                  size: 40,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No rides yet',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create a ride or join one with a code to get started.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 240,
+                child: PrimaryButton(
+                  label: 'Create your first ride',
+                  icon: Icons.add_road_rounded,
+                  onPressed: () => c.tabIndex.value = 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -137,7 +121,9 @@ class _RideCard extends StatelessWidget {
       onTap: () => Get.toNamed(Routes.rideDetail, arguments: ride.id),
       accentColor: isHost ? AppColors.surfaceAccent : scheme.primaryContainer,
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.md + 2),
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md + 2,
+      ),
       child: Row(
         children: <Widget>[
           Container(
@@ -166,9 +152,9 @@ class _RideCard extends StatelessWidget {
                 Text(
                   '${isHost ? 'Host' : 'Rider'} · Code ${ride.code}'
                   '${ride.isActive ? '' : ' · Ended'}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontSize: 13,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontSize: 13),
                 ),
               ],
             ),

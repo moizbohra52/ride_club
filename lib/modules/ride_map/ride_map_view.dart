@@ -10,11 +10,13 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/glass_card.dart';
 import '../../models/member_location.dart';
 import '../../models/ride.dart';
 import '../../models/ride_member.dart';
 import '../../models/route_result.dart';
 import '../../routes/app_routes.dart';
+import '../../widgets/gradient_button.dart';
 import '../rides/member_detail_sheet.dart';
 import 'ride_map_controller.dart';
 
@@ -198,15 +200,7 @@ class RideMapView extends GetView<RideMapController> {
                     Positioned(
                       left: 16,
                       bottom: 148,
-                      child: FloatingActionButton(
-                        heroTag: 'sos',
-                        backgroundColor: AppColors.sos,
-                        onPressed: controller.sendSos,
-                        child: const Icon(
-                          Icons.sos_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
+                      child: _pulsingSosFab(onPressed: controller.sendSos),
                     ),
                     Obx(
                       () => controller.iHaveActiveSos
@@ -247,58 +241,11 @@ class RideMapView extends GetView<RideMapController> {
     );
   }
 
-  Widget _startNavButton(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: AppColors.brandGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppColors.primaryGlow,
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            controller.startTracking();
-          },
-          child: Container(
-            height: 54,
-            alignment: Alignment.center,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                const Icon(
-                  Icons.navigation_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Start',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _startNavButton(BuildContext context) => GradientButton(
+    label: 'Start',
+    icon: Icons.navigation_rounded,
+    onTap: controller.startTracking,
+  );
 
   Widget _stopNavButton(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
@@ -524,7 +471,6 @@ class RideMapView extends GetView<RideMapController> {
 
   Widget _infoCard(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Obx(() {
       final String text;
@@ -536,49 +482,33 @@ class RideMapView extends GetView<RideMapController> {
       } else {
         text = 'Finding your route…';
       }
-      return Material(
-        elevation: 6,
-        shadowColor: AppColors.primaryGlow.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(16),
-        color: isDark
-            ? scheme.surfaceContainerHigh.withValues(alpha: 0.9)
-            : scheme.surface.withValues(alpha: 0.9),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(
-                alpha: isDark ? 0.3 : 0.15,
+      return GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: <Widget>[
+            Icon(Icons.navigation_rounded, color: scheme.primary, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: scheme.onSurface,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.navigation_rounded, color: scheme.primary, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  text,
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: scheme.onSurface,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+            if (controller.rerouting.value)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              if (controller.rerouting.value)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       );
     });
@@ -612,6 +542,11 @@ class RideMapView extends GetView<RideMapController> {
       ),
     ),
   );
+
+  /// A pulsing SOS FAB: a soft repeating glow halo draws the eye to the
+  /// emergency control without being distracting. Tapping fires [onPressed].
+  Widget _pulsingSosFab({required VoidCallback onPressed}) =>
+      _SosFab(onPressed: onPressed);
 
   /// Markers that snap instantly: the user's own location and the route
   /// stops/waypoints. Other members are drawn by [_AnimatedMemberMarkers] so
@@ -755,46 +690,27 @@ class RideMapView extends GetView<RideMapController> {
 
   Widget _membersBar(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Material(
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.1),
+    return GlassCard(
       borderRadius: BorderRadius.circular(18),
-      color: isDark
-          ? scheme.surfaceContainerHigh.withValues(alpha: 0.9)
-          : scheme.surface.withValues(alpha: 0.9),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => _showMembers(context),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(
-                alpha: isDark ? 0.3 : 0.15,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      onTap: () => _showMembers(context),
+      child: Obx(
+        () => Row(
+          children: <Widget>[
+            Icon(Icons.group_rounded, color: scheme.primary),
+            const SizedBox(width: 12),
+            Text(
+              '${controller.members.length} on the map',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: scheme.onSurface,
               ),
             ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Obx(
-            () => Row(
-              children: <Widget>[
-                Icon(Icons.group_rounded, color: scheme.primary),
-                const SizedBox(width: 12),
-                Text(
-                  '${controller.members.length} on the map',
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: scheme.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                Icon(Icons.expand_less_rounded, color: scheme.onSurfaceVariant),
-              ],
-            ),
-          ),
+            const Spacer(),
+            Icon(Icons.expand_less_rounded, color: scheme.onSurfaceVariant),
+          ],
         ),
       ),
     );
@@ -1371,6 +1287,82 @@ class _MapControlPill extends StatelessWidget {
                   size: 26,
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A pulsing SOS FAB: a soft repeating glow halo draws the eye to the
+/// emergency control without being distracting. Tapping fires [onPressed].
+class _SosFab extends StatefulWidget {
+  final VoidCallback onPressed;
+  const _SosFab({required this.onPressed});
+
+  @override
+  State<_SosFab> createState() => _SosFabState();
+}
+
+class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 1.08,
+    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          // Repeating glow halo.
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (BuildContext context, Widget? child) {
+              return Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.sos.withValues(
+                    alpha: 0.35 * (1 - _pulse.value),
+                  ),
+                ),
+              );
+            },
+          ),
+          AnimatedBuilder(
+            animation: _scale,
+            builder: (BuildContext context, Widget? child) {
+              return Transform.scale(scale: _scale.value, child: child);
+            },
+            child: FloatingActionButton(
+              heroTag: 'sos',
+              backgroundColor: AppColors.sos,
+              elevation: 6,
+              onPressed: widget.onPressed,
+              child: const Icon(Icons.sos_rounded, color: Colors.white),
             ),
           ),
         ],

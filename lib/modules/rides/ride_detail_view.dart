@@ -5,10 +5,12 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
 import '../../models/join_request.dart';
 import '../../models/ride_member.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/app_card.dart';
+import '../../widgets/gradient_button.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/status_badge.dart';
 import 'member_detail_sheet.dart';
@@ -40,32 +42,40 @@ class RideDetailView extends GetView<RideDetailController> {
             child: ride == null
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                     children: <Widget>[
-                      _codeCard(context, ride.code, ride.destinationLabel,
-                          ride.isActive),
+                      _codeCard(
+                        context,
+                        ride.code,
+                        ride.destinationLabel,
+                        ride.isActive,
+                      ),
                       if (ride.isActive) ...<Widget>[
-                        const SizedBox(height: 20),
-                        FilledButton.icon(
-                          onPressed: () => Get.toNamed(
+                        const SizedBox(height: AppSpacing.xl),
+                        GradientButton(
+                          label: 'Open live map',
+                          icon: Icons.map_rounded,
+                          onTap: () => Get.toNamed(
                             Routes.rideMap,
                             arguments: controller.rideId,
                           ),
-                          icon: const Icon(Icons.map_rounded),
-                          label: const Text('Open live map'),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(54),
-                            elevation: 4,
-                            shadowColor: AppColors.primaryGlow,
-                          ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpacing.md),
                         OutlinedButton.icon(
                           onPressed: controller.sendSos,
-                          icon: const Icon(Icons.sos_rounded, color: Colors.white),
+                          icon: const Icon(
+                            Icons.sos_rounded,
+                            color: Colors.white,
+                          ),
                           label: const Text(
                             'Send SOS',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
                             backgroundColor: AppColors.sos,
@@ -91,13 +101,21 @@ class RideDetailView extends GetView<RideDetailController> {
                         ),
                         const SizedBox(height: 28),
                       ],
-                      Obx(() =>
-                          _sectionTitle(context, 'Members (${controller.members.length})')),
+                      Obx(
+                        () => _sectionTitle(
+                          context,
+                          'Members (${controller.members.length})',
+                        ),
+                      ),
                       Obx(
                         () => Column(
-                          children: controller.members
-                              .map((m) => _MemberTile(member: m))
-                              .toList(),
+                          children: <Widget>[
+                            for (int i = 0; i < controller.members.length; i++)
+                              _MemberTile(
+                                member: controller.members[i],
+                                index: i,
+                              ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 40),
@@ -131,8 +149,7 @@ class RideDetailView extends GetView<RideDetailController> {
     });
   }
 
-  Widget _codeCard(
-      BuildContext ctx, String code, String dest, bool active) {
+  Widget _codeCard(BuildContext ctx, String code, String dest, bool active) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -220,44 +237,34 @@ class RideDetailView extends GetView<RideDetailController> {
   }
 
   Widget _sectionTitle(BuildContext ctx, String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 12, left: 4),
-        child: Text(
-          t,
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: Theme.of(ctx).colorScheme.onSurface,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: AppSpacing.md, left: AppSpacing.xs),
+    child: Text(t, style: AppTypography.heading(ctx)),
+  );
 
   Widget _muted(BuildContext ctx, String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Text(
-          t,
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            color: Theme.of(ctx).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-          ),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(
+      vertical: AppSpacing.md,
+      horizontal: AppSpacing.xs,
+    ),
+    child: Text(t, style: AppTypography.body(ctx)),
+  );
 
   Widget _chatAction() => Obx(() {
-        final int n = controller.unread.value;
-        return Stack(
-          alignment: Alignment.center,
-          children: <Widget>[
-            IconButton(
-              tooltip: 'Ride chat',
-              onPressed: () =>
-                  Get.toNamed(Routes.chat, arguments: controller.rideId),
-              icon: const Icon(Icons.chat_bubble_outline_rounded),
-            ),
-            if (n > 0)
-              Positioned(right: 6, top: 6, child: StatusBadge.count(count: n)),
-          ],
-        );
-      });
+    final int n = controller.unread.value;
+    return Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        IconButton(
+          tooltip: 'Ride chat',
+          onPressed: () =>
+              Get.toNamed(Routes.chat, arguments: controller.rideId),
+          icon: const Icon(Icons.chat_bubble_outline_rounded),
+        ),
+        if (n > 0)
+          Positioned(right: 6, top: 6, child: StatusBadge.count(count: n)),
+      ],
+    );
+  });
 }
 
 class _RequestTile extends StatelessWidget {
@@ -272,7 +279,9 @@ class _RequestTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
         child: Row(
           children: <Widget>[
             CircleAvatar(
@@ -283,18 +292,22 @@ class _RequestTile extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: Text(req.name,
-                  style: Theme.of(context).textTheme.titleLarge),
+              child: Text(
+                req.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             IconButton(
               onPressed: () => c.accept(req),
-              icon: const Icon(Icons.check_circle,
-                  color: AppColors.success, size: 28),
+              icon: const Icon(
+                Icons.check_circle,
+                color: AppColors.success,
+                size: 28,
+              ),
             ),
             IconButton(
               onPressed: () => c.reject(req),
-              icon:
-                  const Icon(Icons.cancel, color: AppColors.danger, size: 28),
+              icon: const Icon(Icons.cancel, color: AppColors.danger, size: 28),
             ),
           ],
         ),
@@ -305,60 +318,80 @@ class _RequestTile extends StatelessWidget {
 
 class _MemberTile extends StatelessWidget {
   final RideMember member;
+  final int index;
 
-  const _MemberTile({required this.member});
+  const _MemberTile({required this.member, this.index = 0});
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AppCard(
-        onTap: () => showMemberDetail(
-          context,
-          member: member,
-          rideId: Get.find<RideDetailController>().rideId,
+    // Staggered fade+slide entrance, offset by list index.
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: Duration(milliseconds: 300 + index * 60),
+      curve: Curves.easeOut,
+      builder: (BuildContext context, double t, Widget? child) => Opacity(
+        opacity: t.clamp(0, 1),
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * 12),
+          child: child,
         ),
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-        child: Row(
-          children: <Widget>[
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: member.color.withValues(alpha: 0.6),
-                  width: 2.5,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: AppCard(
+          onTap: () => showMemberDetail(
+            context,
+            member: member,
+            rideId: Get.find<RideDetailController>().rideId,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.xs,
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: member.color.withValues(alpha: 0.6),
+                    width: 2.5,
+                  ),
+                ),
+                child: CircleAvatar(
+                  backgroundColor: member.color.withValues(alpha: 0.15),
+                  backgroundImage: member.photoUrl != null
+                      ? CachedNetworkImageProvider(member.photoUrl!)
+                      : null,
+                  child: member.photoUrl == null
+                      ? Text(
+                          member.name.isNotEmpty
+                              ? member.name[0].toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: member.color,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
                 ),
               ),
-              child: CircleAvatar(
-                backgroundColor: member.color.withValues(alpha: 0.15),
-                backgroundImage: member.photoUrl != null
-                    ? CachedNetworkImageProvider(member.photoUrl!)
-                    : null,
-                child: member.photoUrl == null
-                    ? Text(
-                        member.name.isNotEmpty
-                            ? member.name[0].toUpperCase()
-                            : '?',
-                        style: TextStyle(
-                            color: member.color, fontWeight: FontWeight.bold),
-                      )
-                    : null,
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  member.name,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(member.name,
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            if (member.isHost)
-              StatusBadge.label(
-                label: 'Host',
-                color: scheme.primaryContainer,
-                textColor: scheme.primary,
-              ),
-          ],
+              if (member.isHost)
+                StatusBadge.label(
+                  label: 'Host',
+                  color: scheme.primaryContainer,
+                  textColor: scheme.primary,
+                ),
+            ],
+          ),
         ),
       ),
     );

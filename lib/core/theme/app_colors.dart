@@ -67,6 +67,16 @@ class AppColors {
   /// Soft glow for sunset accent shadows.
   static const Color accentGlow = Color(0x40F97316);
 
+  /// Muted on-surface tone (≈60% onSurfaceVariant) for secondary/metadata text.
+  /// Use instead of hand-tuned `withValues(alpha: 0.5)` so the same muted
+  /// contrast is applied consistently across light & dark themes.
+  static const Color onSurfaceMuted = Color(0x991F2937);
+
+  /// Translucent surface tint used for glass/blur overlays floating above the
+  /// map (info card, members bar, SOS banner).
+  static const Color glassLight = Color(0xF2FFFFFF);
+  static const Color glassDark = Color(0xF21A2332);
+
   /// Distinct marker colors for ride members. 10 visually separable hues.
   static const List<Color> memberColors = <Color>[
     Color(0xFF2563EB), // blue
