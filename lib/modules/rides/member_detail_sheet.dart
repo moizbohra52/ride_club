@@ -7,6 +7,7 @@ import '../../models/ride_member.dart';
 import '../../models/route_result.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/status_badge.dart';
+import '../ride_map/ride_map_controller.dart' show RideMapArgs;
 
 /// Shows a bottom sheet with a member's profile info, and — when [live] is
 /// provided (i.e. the Live Map screen is open and has RTDB data for this
@@ -91,8 +92,7 @@ void showMemberDetail(
                             Expanded(
                               child: Text(
                                 'Joined ${_formatDate(member.joinedAt!)}',
-                                style:
-                                    Theme.of(context).textTheme.bodyMedium,
+                                style: Theme.of(context).textTheme.bodyMedium,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -109,7 +109,7 @@ void showMemberDetail(
             if (live != null)
               _LiveStatus(live: live, route: route)
             else
-              _NoLiveData(rideId: rideId),
+              _NoLiveData(rideId: rideId, focusUid: member.uid),
           ],
         ),
       ),
@@ -120,8 +120,18 @@ void showMemberDetail(
 
 String _formatDate(DateTime d) {
   const List<String> months = <String>[
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${months[d.month - 1]} ${d.day}, ${d.year}';
 }
@@ -138,19 +148,34 @@ class _LiveStatus extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _row(context, Icons.circle,
-            live.online ? scheme.primary : scheme.onSurfaceVariant,
-            live.lastSeenText(now)),
+        _row(
+          context,
+          Icons.circle,
+          live.online ? scheme.primary : scheme.onSurfaceVariant,
+          live.lastSeenText(now),
+        ),
         const SizedBox(height: AppSpacing.sm),
-        _row(context, Icons.speed_rounded, scheme.onSurfaceVariant,
-            '${live.speedKmh.toStringAsFixed(0)} km/h'),
+        _row(
+          context,
+          Icons.speed_rounded,
+          scheme.onSurfaceVariant,
+          '${live.speedKmh.toStringAsFixed(0)} km/h',
+        ),
         const SizedBox(height: AppSpacing.sm),
-        _row(context, Icons.battery_std_rounded, scheme.onSurfaceVariant,
-            '${live.battery}% battery'),
+        _row(
+          context,
+          Icons.battery_std_rounded,
+          scheme.onSurfaceVariant,
+          '${live.battery}% battery',
+        ),
         if (route != null) ...<Widget>[
           const SizedBox(height: AppSpacing.sm),
-          _row(context, Icons.navigation_rounded, scheme.onSurfaceVariant,
-              '${route!.distanceText} · ${route!.etaText} to destination'),
+          _row(
+            context,
+            Icons.navigation_rounded,
+            scheme.onSurfaceVariant,
+            '${route!.distanceText} · ${route!.etaText} to destination',
+          ),
         ],
       ],
     );
@@ -169,7 +194,8 @@ class _LiveStatus extends StatelessWidget {
 
 class _NoLiveData extends StatelessWidget {
   final String rideId;
-  const _NoLiveData({required this.rideId});
+  final String focusUid;
+  const _NoLiveData({required this.rideId, required this.focusUid});
 
   @override
   Widget build(BuildContext context) {
@@ -184,7 +210,10 @@ class _NoLiveData extends StatelessWidget {
         FilledButton.icon(
           onPressed: () {
             Get.back();
-            Get.toNamed(Routes.rideMap, arguments: rideId);
+            Get.toNamed(
+              Routes.rideMap,
+              arguments: RideMapArgs(rideId: rideId, focusUid: focusUid),
+            );
           },
           icon: const Icon(Icons.map_rounded),
           label: const Text('Open live map'),

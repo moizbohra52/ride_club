@@ -1,6 +1,8 @@
 import 'package:firebase_database/firebase_database.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/constants/app_constants.dart';
 import '../core/utils/logger.dart';
 import '../core/utils/sms_link.dart';
 import '../models/sos_alert.dart';
@@ -17,8 +19,24 @@ class SosService extends GetxService {
   final AuthService _auth = Get.find<AuthService>();
   final UserService _users = Get.find<UserService>();
   final LocationService _loc = Get.find<LocationService>();
+  final GetStorage _box = GetStorage();
 
   DatabaseReference _sos(String rideId) => _db.ref('sos/$rideId');
+
+  /// SOS ids this device has already dismissed, so a still-active alert
+  /// (the sender hasn't cancelled it) doesn't keep resurfacing every time the
+  /// live map screen is reopened.
+  Set<String> get _dismissed =>
+      (_box.read<List<dynamic>>(AppConstants.kDismissedSosIds) ?? const [])
+          .cast<String>()
+          .toSet();
+
+  bool isDismissed(String sosId) => _dismissed.contains(sosId);
+
+  void dismiss(String sosId) {
+    final Set<String> ids = _dismissed..add(sosId);
+    _box.write(AppConstants.kDismissedSosIds, ids.toList());
+  }
 
   Future<String?> trigger(String rideId) async {
     final String? uid = _auth.uid;
@@ -54,15 +72,23 @@ class SosService extends GetxService {
           event.snapshot.value as Map<dynamic, dynamic>?;
       if (raw == null) return <SosAlert>[];
       return raw.entries
-          .map((MapEntry<dynamic, dynamic> e) =>
-              SosAlert.fromMap(e.key as String, e.value as Map<dynamic, dynamic>))
+          .map(
+            (MapEntry<dynamic, dynamic> e) => SosAlert.fromMap(
+              e.key as String,
+              e.value as Map<dynamic, dynamic>,
+            ),
+          )
           .where((SosAlert s) => s.active)
           .toList();
     });
   }
 
   Future<void> textEmergencyContact(
-      String contact, String senderName, double? lat, double? lng) async {
+    String contact,
+    String senderName,
+    double? lat,
+    double? lng,
+  ) async {
     final Uri uri = emergencySmsUri(contact, senderName, lat, lng);
     try {
       if (await canLaunchUrl(uri)) await launchUrl(uri);

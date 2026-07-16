@@ -51,4 +51,5 @@ class AppConstants {
   // --- GetStorage keys ---
   static const String kThemeMode = 'theme_mode';
   static const String kOnboardingDone = 'onboarding_done';
+  static const String kDismissedSosIds = 'dismissed_sos_ids';
 }

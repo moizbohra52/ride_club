@@ -15,7 +15,7 @@ enum LocationPermissionResult {
 
 /// GPS + battery + compass wrapper.
 ///
-/// Emits [RidePosition]s on a battery-adaptive interval (2.5s normal, 9s when
+/// Emits [RidePosition]s on a battery-adaptive interval (1s normal, 9s when
 /// battery < 20%). Uses a periodic poll rather than geolocator's fixed-filter
 /// stream so the interval can change at runtime. The Android foreground-service
 /// settings (persistent notification) are exposed for the always-on stream
@@ -83,13 +83,13 @@ class LocationService extends GetxService {
   }
 
   /// Battery-adaptive position stream. Re-reads battery each tick and delays
-  /// 2.5s (normal) or 9s (low battery) between fixes.
+  /// 1s (normal) or 9s (low battery) between fixes.
   Stream<RidePosition> positionStream() async* {
     while (true) {
       await _refreshBattery();
       final Duration interval = isLowBattery
           ? const Duration(seconds: 9)
-          : const Duration(milliseconds: 2500);
+          : const Duration(milliseconds: 1000);
       try {
         final Position pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(

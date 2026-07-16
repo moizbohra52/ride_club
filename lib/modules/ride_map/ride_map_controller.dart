@@ -19,6 +19,14 @@ import '../../services/routing_service.dart';
 import '../../services/sos_service.dart';
 import '../sos/sos_ui.dart';
 
+/// Navigation arguments for [Routes.rideMap]. [focusUid], when given, makes
+/// the map follow that member on open instead of the current user.
+class RideMapArgs {
+  final String rideId;
+  final String? focusUid;
+  const RideMapArgs({required this.rideId, this.focusUid});
+}
+
 class RideMapController extends GetxController
     with GetTickerProviderStateMixin {
   final LocationService _loc = Get.find<LocationService>();
@@ -29,7 +37,8 @@ class RideMapController extends GetxController
   final SosService _sos = Get.find<SosService>();
   final AuthService _auth = Get.find<AuthService>();
   final String rideId;
-  RideMapController(this.rideId);
+  final String? initialFocusUid;
+  RideMapController(this.rideId, {this.initialFocusUid});
 
   late final AnimatedMapController animatedMapController;
   bool _isDisposed = false;
@@ -49,7 +58,17 @@ class RideMapController extends GetxController
   // --- Follow mode ---
   /// null = following my own location; a uid = following that member.
   final Rxn<String> followTarget = Rxn<String>();
-  final RxBool isFollowing = true.obs;
+  final RxBool isFollowing = false.obs;
+
+  /// Google-Maps-style navigation. Before the user taps "Start" the map is a
+  /// static preview (no camera follow); once tracking begins the camera locks
+  /// onto the target in a tilted-ahead nav view and refreshes on every fix.
+  final RxBool isTracking = false.obs;
+
+  /// Whether the recenter button should be shown. Turns true the moment the
+  /// user manually moves the camera (pan/zoom/rotate) — like Google Maps —
+  /// and back to false once they recenter. Independent of [isTracking].
+  final RxBool showRecenter = false.obs;
 
   // --- Phase 6: SOS ---
   final RxList<SosAlert> activeSos = <SosAlert>[].obs;
@@ -66,6 +85,9 @@ class RideMapController extends GetxController
   final Distance _dist = const Distance();
   final Map<String, LatLng> _lastRoutedFrom = <String, LatLng>{};
 
+  /// Current zoom level - updated reactively from map position changes
+  final RxDouble zoomLevel = 16.5.obs;
+
   bool get hasDestination => destination.value != null;
 
   String? get uid => _auth.uid;
@@ -76,13 +98,14 @@ class RideMapController extends GetxController
     animatedMapController = AnimatedMapController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.linear,
+      curve: Curves.easeOut,
       cancelPreviousAnimations: true,
     );
     _start();
   }
 
   Future<void> _start() async {
+    if (initialFocusUid != null) followTarget.value = initialFocusUid;
     final LocationPermissionResult res = await _loc.ensurePermission();
     if (res != LocationPermissionResult.granted) {
       permissionError.value = switch (res) {
@@ -113,7 +136,11 @@ class RideMapController extends GetxController
     activeSos.bindStream(_sos.watchActiveSos(rideId));
     ever<List<SosAlert>>(activeSos, (List<SosAlert> list) {
       for (final SosAlert s in list) {
-        if (s.senderId == uid || _seenSos.contains(s.sosId)) continue;
+        if (s.senderId == uid ||
+            _seenSos.contains(s.sosId) ||
+            _sos.isDismissed(s.sosId)) {
+          continue;
+        }
         _seenSos.add(s.sosId);
         showIncomingSos(s, rideId);
       }
@@ -229,8 +256,33 @@ class RideMapController extends GetxController
     return null;
   }
 
+  /// Camera center for a Google-Maps-style nav view: pushed *ahead* of the
+  /// target along its heading, so the marker sits in the lower third of the
+  /// screen with the road ahead filling the top.
   LatLng _cameraCenterBehind(LatLng target, double heading) {
-    return _dist.offset(target, 120, heading + 180);
+    return _dist.offset(target, _navAheadMeters, heading);
+  }
+
+  /// How far ahead of the marker to place the camera center. ~260m at the
+  /// nav zoom (16.5) drops the marker to roughly the lower third of a phone
+  /// screen; the "behind"/preview recenter uses a smaller shift.
+  static const double _navAheadMeters = 260;
+
+  /// "Start" button: begin Google-Maps-style navigation — lock the camera to
+  /// the follow target (self by default) in the tilted nav view and keep it
+  /// glued there on every location fix.
+  void startTracking() {
+    if (_isDisposed) return;
+    isTracking.value = true;
+    _startFollowing(target: followTarget.value);
+  }
+
+  /// "Stop"/"End" button: leave navigation and return to a free preview map.
+  void stopTracking() {
+    if (_isDisposed) return;
+    isTracking.value = false;
+    isFollowing.value = false;
+    showRecenter.value = false;
   }
 
   void _startFollowing({String? target}) {
@@ -238,6 +290,7 @@ class RideMapController extends GetxController
     Log.d('_startFollowing called with target: $target');
     followTarget.value = target;
     isFollowing.value = true;
+    showRecenter.value = false;
     final LatLng? pos = _followTargetPosition();
     if (pos == null) {
       Log.d('_startFollowing: no position found for target $target');
@@ -249,38 +302,35 @@ class RideMapController extends GetxController
     );
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
-      zoom: 20,
+      zoom: 16.5,
       rotation: -heading,
     );
   }
 
   void _followIfActive() {
-    if (_isDisposed) {
-      Log.d('_followIfActive called after disposal');
-      return;
-    }
-    Log.d('_followIfActive called, isFollowing: ${isFollowing.value}');
-    if (!isFollowing.value) return;
+    if (_isDisposed) return;
+    if (!isTracking.value || !isFollowing.value) return;
     final LatLng? pos = _followTargetPosition();
     if (pos == null) {
       Log.d('_followIfActive: no position');
       return;
     }
     final double heading = _followTargetHeading() ?? 0;
-    Log.d(
-      '_followIfActive: moving to lat: ${pos.latitude}, lng: ${pos.longitude}, heading: $heading',
-    );
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
       zoom: mapController.camera.zoom,
       rotation: -heading,
+      // Glide over ~the fix cadence so movement looks continuous, not steppy.
+      duration: const Duration(milliseconds: 900),
     );
   }
 
-  void zoomIn() {
+  void zoomIn({bool keepFollowing = false}) {
     if (_isDisposed) return;
-    onMapDragged(); // Stop following when zooming via button
+    if (!keepFollowing)
+      onMapDragged(); // Stop following when zooming via button
     final double newZoom = mapController.camera.zoom + 1;
+    zoomLevel.value = newZoom;
     animatedMapController.animateTo(
       dest: mapController.camera.center,
       zoom: newZoom,
@@ -288,10 +338,12 @@ class RideMapController extends GetxController
     );
   }
 
-  void zoomOut() {
+  void zoomOut({bool keepFollowing = false}) {
     if (_isDisposed) return;
-    onMapDragged(); // Stop following when zooming via button
+    if (!keepFollowing)
+      onMapDragged(); // Stop following when zooming via button
     final double newZoom = mapController.camera.zoom - 1;
+    zoomLevel.value = newZoom;
     animatedMapController.animateTo(
       dest: mapController.camera.center,
       zoom: newZoom,
@@ -326,16 +378,24 @@ class RideMapController extends GetxController
     );
   }
 
-  /// Recenter FAB: resume following the last target (self, or a member if
-  /// one was previously selected). Immediately snaps to target with heading.
+  /// Recenter FAB: resume following the target (self by default, or a specific
+  /// member). If the target member is no longer available, falls back to self.
+  /// Animates the camera to center behind the target with a 16.5 zoom.
   void recenter() {
     if (_isDisposed) return;
+    isTracking.value = true;
     isFollowing.value = true;
-    final String? target = followTarget.value;
-    final LatLng? pos = _followTargetPosition();
+    showRecenter.value = false;
+    // Resolve target position – fallback to self if member not found
+    LatLng? pos = _followTargetPosition();
+    if (pos == null) {
+      // Target member might have left – reset to self
+      followTarget.value = null;
+      pos = myLatLng.value;
+      if (pos == null) return;
+    }
     final double heading = _followTargetHeading() ?? 0;
-    if (pos == null) return;
-    Log.d('recenter: target=$target, heading=$heading');
+    Log.d('recenter: target=${followTarget.value}, heading=$heading');
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
       zoom: 16.5,
@@ -343,15 +403,25 @@ class RideMapController extends GetxController
     );
   }
 
-  /// Members list tap: start following this specific member.
+  /// Members list tap: enter navigation following this specific member.
   void followMember(MemberLocation m) {
-    if (!_isDisposed) _startFollowing(target: m.uid);
+    if (_isDisposed) return;
+    isTracking.value = true;
+    _startFollowing(target: m.uid);
   }
 
-  /// Called when the user drags/pinches the map — stops auto-follow so we
-  /// don't fight their gesture. The recenter FAB reappears in its
-  /// actionable state; tapping it resumes following [followTarget].
-  void onMapDragged() => isFollowing.value = false;
+  /// Called when the user drags/pinches/zooms the map — stops auto-follow so
+  /// we don't fight their gesture, and immediately reveals the recenter button
+  /// (Google-Maps-style, on the very first interaction).
+  void onMapDragged() {
+    isFollowing.value = false;
+    showRecenter.value = true;
+  }
+
+  /// Update zoom level from map position changes
+  void updateZoomLevel(double newZoom) {
+    zoomLevel.value = newZoom;
+  }
 
   Future<void> openSettings() => Geolocator.openAppSettings();
 

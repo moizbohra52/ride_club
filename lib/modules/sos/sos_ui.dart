@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/sos_service.dart';
 import '../../services/user_service.dart';
+import '../ride_map/ride_map_controller.dart' show RideMapArgs;
 
 /// Confirms and triggers an SOS for [rideId]. Returns the sosId if sent, else
 /// null (user cancelled). Also offers to text the emergency contact.
@@ -34,8 +35,11 @@ Future<String?> confirmAndSendSos(String rideId) async {
   if (ok != true) return null;
 
   final String? sosId = await Get.find<SosService>().trigger(rideId);
-  Get.find<NotificationService>()
-      .showLocal('SOS sent', 'Your ride has been alerted.', sos: true);
+  Get.find<NotificationService>().showLocal(
+    'SOS sent',
+    'Your ride has been alerted.',
+    sos: true,
+  );
 
   // Offer emergency-contact SMS if one is set.
   final String? uid = Get.find<AuthService>().uid;
@@ -88,8 +92,11 @@ void showIncomingSos(SosAlert alert, String rideId) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.white, size: 56),
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.white,
+              size: 56,
+            ),
             const SizedBox(height: 12),
             Text(
               '${alert.senderName} needs help!',
@@ -108,16 +115,28 @@ void showIncomingSos(SosAlert alert, String rideId) {
                   foregroundColor: AppColors.sos,
                 ),
                 onPressed: () {
+                  Get.find<SosService>().dismiss(alert.sosId);
                   Get.back();
-                  Get.toNamed(Routes.rideMap, arguments: rideId);
+                  Get.toNamed(
+                    Routes.rideMap,
+                    arguments: RideMapArgs(
+                      rideId: rideId,
+                      focusUid: alert.senderId,
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.map_rounded),
                 label: const Text('Open live map'),
               ),
             TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('Dismiss',
-                  style: TextStyle(color: Colors.white)),
+              onPressed: () {
+                Get.find<SosService>().dismiss(alert.sosId);
+                Get.back();
+              },
+              child: const Text(
+                'Dismiss',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),

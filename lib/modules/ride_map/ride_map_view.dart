@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -89,6 +90,7 @@ class RideMapView extends GetView<RideMapController> {
                 initialCenter: center,
                 initialZoom: 16.5,
                 onPositionChanged: (MapCamera camera, bool hasGesture) {
+                  controller.updateZoomLevel(camera.zoom);
                   if (hasGesture) controller.onMapDragged();
                 },
               ),
@@ -98,7 +100,19 @@ class RideMapView extends GetView<RideMapController> {
                   userAgentPackageName: AppConstants.userAgentPackageName,
                 ),
                 Obx(() => PolylineLayer(polylines: _routePolylines(isDark))),
-                Obx(() => MarkerLayer(markers: _markers(context, isDark))),
+                // Static markers (me + stops) snap instantly; other members'
+                // markers glide between fixes for a Google-Maps-style feel.
+                Obx(
+                  () => MarkerLayer(markers: _staticMarkers(context, isDark)),
+                ),
+                Obx(
+                  () => _AnimatedMemberMarkers(
+                    specs: _memberMarkerSpecs(context, isDark),
+                    counterRotation:
+                        -controller.mapController.camera.rotation *
+                        (math.pi / 180),
+                  ),
+                ),
                 RichAttributionWidget(
                   attributions: <SourceAttribution>[
                     TextSourceAttribution(
@@ -119,87 +133,112 @@ class RideMapView extends GetView<RideMapController> {
               ],
             ),
             // SafeArea around widget overlays to prevent status/navigation bar clipping
-            SafeArea(
-              child: Stack(
-                children: <Widget>[
-                  Positioned(
-                    top: 12,
-                    left: 16,
-                    right: 16,
-                    child: _infoCard(context),
-                  ),
-                  Positioned(
-                    right: 16,
-                    bottom: 168,
-                    child: Column(
-                      children: <Widget>[
-                        FloatingActionButton.small(
-                          heroTag: 'zoomIn',
-                          onPressed: controller.zoomIn,
-                          child: const Icon(Icons.add),
-                        ),
-                        const SizedBox(height: 8),
-                        FloatingActionButton.small(
-                          heroTag: 'zoomOut',
-                          onPressed: controller.zoomOut,
-                          child: const Icon(Icons.remove),
-                        ),
-                        const SizedBox(height: 8),
-                        FloatingActionButton.small(
-                          heroTag: 'fitAll',
-                          onPressed: controller.fitAll,
-                          child: const Icon(Icons.fit_screen_rounded),
-                        ),
-                      ],
+            Positioned.fill(
+              child: SafeArea(
+                child: Stack(
+                  children: <Widget>[
+                    Positioned(
+                      top: 12,
+                      left: 16,
+                      right: 16,
+                      child: _infoCard(context),
                     ),
-                  ),
-                  Positioned(
-                    right: 16,
-                    bottom: 96,
-                    child: Obx(
-                      () => FloatingActionButton(
-                        heroTag: 'recenter',
-                        backgroundColor: controller.isFollowing.value
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
-                        foregroundColor: controller.isFollowing.value
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        onPressed: controller.recenter,
-                        elevation: controller.isFollowing.value ? 2 : 6,
-                        child: const Icon(Icons.my_location_rounded),
+                    // Right-side controls: Zoom (pill) + Fit all + Recenter (bottom)
+                    Positioned(
+                      right: 16,
+                      bottom: 168,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          // Zoom in/out vertical pill with zoom level indicator
+                          Obx(
+                            () => _MapControlPill(
+                              zoomLevel: controller.zoomLevel.value,
+                              onZoomIn: () =>
+                                  controller.zoomIn(keepFollowing: true),
+                              onZoomOut: () =>
+                                  controller.zoomOut(keepFollowing: true),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Fit all button
+                          _MapControlButton(
+                            icon: Icons.fit_screen_rounded,
+                            tooltip: 'Fit all riders',
+                            onTap: controller.fitAll,
+                          ),
+                          const SizedBox(height: 12),
+                          // Recenter button — appears the instant the user
+                          // moves the map (pan/zoom/rotate), like Google Maps,
+                          // and hides again once they recenter.
+                          Obx(() {
+                            final bool show = controller.showRecenter.value;
+                            return IgnorePointer(
+                              ignoring: !show,
+                              child: AnimatedOpacity(
+                                opacity: show ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 150),
+                                child: AnimatedScale(
+                                  scale: show ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 150),
+                                  curve: Curves.easeOutBack,
+                                  child: _MapControlButton(
+                                    icon: Icons.my_location_rounded,
+                                    tooltip: 'Recenter map',
+                                    onTap: controller.recenter,
+                                    isPrimary: true,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
-                  ),
-                  Positioned(
-                    left: 16,
-                    bottom: 96,
-                    child: FloatingActionButton(
-                      heroTag: 'sos',
-                      backgroundColor: AppColors.sos,
-                      onPressed: controller.sendSos,
-                      child: const Icon(Icons.sos_rounded, color: Colors.white),
+                    Positioned(
+                      left: 16,
+                      bottom: 148,
+                      child: FloatingActionButton(
+                        heroTag: 'sos',
+                        backgroundColor: AppColors.sos,
+                        onPressed: controller.sendSos,
+                        child: const Icon(
+                          Icons.sos_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-                  ),
-                  Obx(
-                    () => controller.iHaveActiveSos
-                        ? Positioned(
-                            top: 80,
-                            left: 16,
-                            right: 16,
-                            child: _sosBanner(),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                    child: _membersBar(context),
-                  ),
-                ],
+                    Obx(
+                      () => controller.iHaveActiveSos
+                          ? Positioned(
+                              top: 80,
+                              left: 16,
+                              right: 16,
+                              child: _sosBanner(),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    // Start / Stop navigation control, just above the members
+                    // bar. Big brand "Start" until the user begins tracking,
+                    // then a compact "End" pill.
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 80,
+                      child: Obx(
+                        () => controller.isTracking.value
+                            ? _stopNavButton(context)
+                            : _startNavButton(context),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: _membersBar(context),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -207,6 +246,200 @@ class RideMapView extends GetView<RideMapController> {
       }),
     );
   }
+
+  Widget _startNavButton(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: AppColors.brandGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: AppColors.primaryGlow,
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            controller.startTracking();
+          },
+          child: Container(
+            height: 54,
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                const Icon(
+                  Icons.navigation_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Start',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stopNavButton(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(16),
+      color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          controller.stopTracking();
+        },
+        child: Container(
+          height: 50,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(
+                alpha: isDark ? 0.3 : 0.15,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.close_rounded, color: scheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'End navigation',
+                style: GoogleFonts.poppins(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Polyline> _routePolylines(bool isDark) {
+    final List<Polyline> lines = <Polyline>[];
+    final List<LatLng>? planned = controller.plannedRoute.value;
+
+    if (planned != null && planned.length >= 2) {
+      // Draw planned route background first
+      lines.add(
+        Polyline(
+          points: planned,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.4)
+              : AppColors.ink.withValues(alpha: 0.35),
+          strokeWidth: 6,
+        ),
+      );
+
+      // Draw current user's path on planned route
+      final Color myColor = isDark ? Colors.white : AppColors.seed;
+      lines.add(
+        Polyline(
+          points: planned,
+          color: myColor.withValues(alpha: isDark ? 0.4 : 0.25),
+          strokeWidth: 12,
+        ),
+      );
+      lines.add(Polyline(points: planned, color: myColor, strokeWidth: 6));
+
+      // Draw other members' paths on the same planned route with offsets
+      final List<MemberLocation> otherMembers = controller.members
+          .where((MemberLocation m) => m.uid != controller.uid)
+          .toList();
+      for (final MemberLocation m in otherMembers) {
+        final Color memberColor = AppColors.memberColorForKey(m.uid);
+        final double offsetAmount = _offsetAmountFor(m.uid);
+        final List<LatLng> offsetPoints = _offsetPoints(planned, offsetAmount);
+
+        lines.add(
+          Polyline(
+            points: offsetPoints,
+            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
+            strokeWidth: 10,
+          ),
+        );
+        lines.add(
+          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+        );
+      }
+    } else {
+      // Fallback: draw individual routes when no planned route exists
+      final RouteResult? myR = controller.myRoute.value;
+      if (myR != null) {
+        lines.add(
+          Polyline(
+            points: myR.points,
+            color: isDark
+                ? AppColors.seed.withValues(alpha: 0.4)
+                : AppColors.seed.withValues(alpha: 0.25),
+            strokeWidth: 12,
+          ),
+        );
+        lines.add(
+          Polyline(
+            points: myR.points,
+            color: isDark ? Colors.white : AppColors.seed,
+            strokeWidth: 6,
+          ),
+        );
+      }
+      controller.memberRoutes.forEach((String uid, RouteResult route) {
+        final Color memberColor = AppColors.memberColorForKey(uid);
+        final double offsetAmount = _offsetAmountFor(uid);
+        final List<LatLng> offsetPoints = _offsetPoints(
+          route.points,
+          offsetAmount,
+        );
+
+        lines.add(
+          Polyline(
+            points: offsetPoints,
+            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
+            strokeWidth: 10,
+          ),
+        );
+        lines.add(
+          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+        );
+      });
+    }
+    return lines;
+  }
+
+  /// Deterministic left/right offset (±5m) for a member, keyed only by their
+  /// uid — independent of iteration order — so the same member always gets
+  /// the same offset side in both the polyline and its marker.
+  double _offsetAmountFor(String uid) => uid.hashCode.isEven ? 5 : -5;
 
   /// Offsets a list of LatLng points by a small distance perpendicular to the route direction
   List<LatLng> _offsetPoints(List<LatLng> points, double offsetMeters) {
@@ -245,152 +478,48 @@ class RideMapView extends GetView<RideMapController> {
     return offsetPoints;
   }
 
-  List<Polyline> _routePolylines(bool isDark) {
-    final List<Polyline> lines = <Polyline>[];
-    final List<LatLng>? planned = controller.plannedRoute.value;
+  /// Finds where [pos] sits along [routePoints] (nearest segment) and returns
+  /// that same spot shifted perpendicular to the route by [offsetMeters] —
+  /// i.e. the point on the offset line (see [_offsetPoints]) closest to
+  /// [pos], so a member's marker always sits on the line drawn for them
+  /// instead of at their raw, unoffset GPS position.
+  LatLng _nearestOffsetPoint(
+    LatLng pos,
+    List<LatLng> routePoints,
+    double offsetMeters,
+  ) {
+    const Distance distance = Distance();
+    double bestDist = double.infinity;
+    LatLng bestPoint = routePoints.first;
+    double bestBearing = 0;
 
-    if (planned != null && planned.length >= 2) {
-      // Draw planned route background first
-      lines.add(
-        Polyline(
-          points: planned,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.4)
-              : AppColors.ink.withValues(alpha: 0.35),
-          strokeWidth: 6,
-        ),
-      );
+    for (int i = 0; i < routePoints.length - 1; i++) {
+      final LatLng a = routePoints[i];
+      final LatLng b = routePoints[i + 1];
+      final double segBearing = distance.bearing(a, b);
+      final double segLengthMeters = distance.as(LengthUnit.Meter, a, b);
+      if (segLengthMeters == 0) continue;
 
-      // Draw current user's path on planned route
-      final Color myColor = isDark ? Colors.white : AppColors.seed;
-      lines.add(
-        Polyline(
-          points: planned,
-          color: myColor.withValues(alpha: isDark ? 0.4 : 0.25),
-          strokeWidth: 12,
-        ),
-      );
-      lines.add(Polyline(points: planned, color: myColor, strokeWidth: 6));
-
-      // Draw other members' paths on the same planned route with offsets
-      int memberIndex = 0;
-      final List<MemberLocation> otherMembers = controller.members
-          .where((MemberLocation m) => m.uid != controller.uid)
-          .toList();
-      for (final MemberLocation m in otherMembers) {
-        final Color memberColor = AppColors.memberColorForKey(m.uid);
-
-        // Calculate offset for this member (alternate left/right per member)
-        final double offsetAmount = memberIndex % 2 == 0
-            ? 5
-            : -5; // 5 meters offset, alternate direction
-        final List<LatLng> offsetPoints = _offsetPoints(planned, offsetAmount);
-
-        lines.add(
-          Polyline(
-            points: offsetPoints,
-            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
-            strokeWidth: 10,
-          ),
-        );
-        lines.add(
-          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
-        );
-        memberIndex++;
+      // Project pos onto segment a→b (in meters, via equirectangular approx
+      // over this short segment) to find the closest point on it.
+      final double toPosBearing = distance.bearing(a, pos);
+      final double toPosMeters = distance.as(LengthUnit.Meter, a, pos);
+      final double angleRad = (toPosBearing - segBearing) * math.pi / 180;
+      double along = toPosMeters * math.cos(angleRad);
+      along = along.clamp(0, segLengthMeters);
+      final LatLng candidate = along == 0
+          ? a
+          : distance.offset(a, along, segBearing);
+      final double d = distance.as(LengthUnit.Meter, pos, candidate);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPoint = candidate;
+        bestBearing = segBearing;
       }
-    } else {
-      // Fallback: draw individual routes when no planned route exists
-      final RouteResult? myR = controller.myRoute.value;
-      if (myR != null) {
-        lines.add(
-          Polyline(
-            points: myR.points,
-            color: isDark
-                ? AppColors.seed.withValues(alpha: 0.4)
-                : AppColors.seed.withValues(alpha: 0.25),
-            strokeWidth: 12,
-          ),
-        );
-        lines.add(
-          Polyline(
-            points: myR.points,
-            color: isDark ? Colors.white : AppColors.seed,
-            strokeWidth: 6,
-          ),
-        );
-      }
-      int memberIndex = 0;
-      controller.memberRoutes.forEach((String uid, RouteResult route) {
-        final Color memberColor = AppColors.memberColorForKey(uid);
-
-        // Calculate offset for this member (alternate left/right per member)
-        final double offsetAmount = memberIndex % 2 == 0
-            ? 5
-            : -5; // 5 meters offset, alternate direction
-        final List<LatLng> offsetPoints = _offsetPoints(
-          route.points,
-          offsetAmount,
-        );
-
-        lines.add(
-          Polyline(
-            points: offsetPoints,
-            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
-            strokeWidth: 10,
-          ),
-        );
-        lines.add(
-          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
-        );
-        memberIndex++;
-      });
     }
-    return lines;
-  }
 
-  List<Marker> _routeArrows(bool isDark) {
-    final List<LatLng>? planned = controller.plannedRoute.value;
-    final List<LatLng>? points = planned != null && planned.length >= 2
-        ? planned
-        : controller.myRoute.value?.points;
-    if (points == null || points.length < 2) return <Marker>[];
-    final double counterRotation =
-        -controller.mapController.camera.rotation * (math.pi / 180);
-    final List<Marker> arrows = <Marker>[];
-    const int step = 10; // ~1 arrow per 10 route points
-    for (int i = step; i < points.length; i += step) {
-      final LatLng a = points[i - 1];
-      final LatLng b = points[i];
-      final double bearing = _bearing(a, b);
-      arrows.add(
-        Marker(
-          point: b,
-          width: 24,
-          height: 24,
-          child: Transform.rotate(
-            angle: counterRotation + (bearing * math.pi / 180),
-            child: Icon(
-              Icons.navigation_rounded,
-              color: isDark ? Colors.white : AppColors.seed,
-              size: 18,
-            ),
-          ),
-        ),
-      );
-    }
-    return arrows;
-  }
-
-  double _bearing(LatLng from, LatLng to) {
-    final double lat1 = from.latitude * math.pi / 180;
-    final double lat2 = to.latitude * math.pi / 180;
-    final double dLon = (to.longitude - from.longitude) * math.pi / 180;
-    final double y = math.sin(dLon) * math.cos(lat2);
-    final double x =
-        math.cos(lat1) * math.sin(lat2) -
-        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
-    final double deg = math.atan2(y, x) * 180 / math.pi;
-    return (deg + 360) % 360;
+    final double offsetBearing = (bestBearing + 90) % 360;
+    return distance.offset(bestPoint, offsetMeters, offsetBearing);
   }
 
   Widget _infoCard(BuildContext context) {
@@ -484,7 +613,10 @@ class RideMapView extends GetView<RideMapController> {
     ),
   );
 
-  List<Marker> _markers(BuildContext context, bool isDark) {
+  /// Markers that snap instantly: the user's own location and the route
+  /// stops/waypoints. Other members are drawn by [_AnimatedMemberMarkers] so
+  /// they glide between fixes.
+  List<Marker> _staticMarkers(BuildContext context, bool isDark) {
     final List<Marker> markers = <Marker>[];
     final double counterRotation =
         -controller.mapController.camera.rotation * (math.pi / 180);
@@ -516,47 +648,6 @@ class RideMapView extends GetView<RideMapController> {
       );
     }
 
-    for (final MemberLocation m in controller.members) {
-      if (m.uid == controller.uid) continue; // Don't duplicate the "me" marker
-      final RideMember? profile = controller.rideMemberFor(m.uid);
-      final RouteResult? route = controller.routeFor(m.uid);
-      final RideMember resolved =
-          profile ??
-          RideMember(
-            uid: m.uid,
-            name: 'Rider',
-            colorValue: AppColors.memberColorForKey(m.uid).toARGB32(),
-            role: 'rider',
-          );
-      markers.add(
-        Marker(
-          key: ValueKey<String>(m.uid),
-          point: LatLng(m.lat, m.lng),
-          width: 80,
-          height: 80,
-          child: Transform.rotate(
-            angle: counterRotation,
-            child: GestureDetector(
-              onTap: () => showMemberDetail(
-                context,
-                member: resolved,
-                rideId: controller.rideId,
-                live: m,
-                route: route,
-              ),
-              child: _MemberPin(
-                color: AppColors.memberColorForKey(m.uid),
-                heading: m.heading,
-                speedKmh: m.speedKmh,
-                isMe: false,
-                photoUrl: profile?.photoUrl,
-                name: resolved.name,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
     final List<RideDestination> stops = controller.orderedStops;
     for (int i = 0; i < stops.length; i++) {
       final RideDestination s = stops[i];
@@ -593,8 +684,73 @@ class RideMapView extends GetView<RideMapController> {
         ),
       );
     }
-    markers.addAll(_routeArrows(isDark));
+    // Route arrows removed
     return markers;
+  }
+
+  /// Build a spec per other member: the target point (snapped onto their
+  /// offset route line) plus the pin widget. [_AnimatedMemberMarkers] glides
+  /// each marker from its previous point to this target.
+  List<_MemberMarkerSpec> _memberMarkerSpecs(
+    BuildContext context,
+    bool isDark,
+  ) {
+    final List<_MemberMarkerSpec> specs = <_MemberMarkerSpec>[];
+    final List<LatLng>? planned = controller.plannedRoute.value;
+    for (final MemberLocation m in controller.members) {
+      if (m.uid == controller.uid) continue; // Don't duplicate the "me" marker
+      final RideMember? profile = controller.rideMemberFor(m.uid);
+      final RouteResult? route = controller.routeFor(m.uid);
+      final RideMember resolved =
+          profile ??
+          RideMember(
+            uid: m.uid,
+            name: 'Rider',
+            colorValue: AppColors.memberColorForKey(m.uid).toARGB32(),
+            role: 'rider',
+          );
+
+      // Snap the marker onto the same offset line drawn for this member in
+      // _routePolylines, so it never appears to drift off its own route.
+      final List<LatLng>? memberRoutePoints =
+          planned != null && planned.length >= 2
+          ? planned
+          : controller.memberRoutes[m.uid]?.points;
+      final LatLng realPos = LatLng(m.lat, m.lng);
+      final LatLng markerPoint =
+          memberRoutePoints != null && memberRoutePoints.length >= 2
+          ? _nearestOffsetPoint(
+              realPos,
+              memberRoutePoints,
+              _offsetAmountFor(m.uid),
+            )
+          : realPos;
+
+      specs.add(
+        _MemberMarkerSpec(
+          uid: m.uid,
+          target: markerPoint,
+          pin: GestureDetector(
+            onTap: () => showMemberDetail(
+              context,
+              member: resolved,
+              rideId: controller.rideId,
+              live: m,
+              route: route,
+            ),
+            child: _MemberPin(
+              color: AppColors.memberColorForKey(m.uid),
+              heading: m.heading,
+              speedKmh: m.speedKmh,
+              isMe: false,
+              photoUrl: profile?.photoUrl,
+              name: resolved.name,
+            ),
+          ),
+        ),
+      );
+    }
+    return specs;
   }
 
   Widget _membersBar(BuildContext context) {
@@ -762,6 +918,130 @@ class RideMapView extends GetView<RideMapController> {
   }
 }
 
+/// One other-member marker to render: where it should be ([target]) and the
+/// pin widget to show there. Keyed by [uid] so [_AnimatedMemberMarkers] can
+/// glide the same member from its previous position.
+class _MemberMarkerSpec {
+  final String uid;
+  final LatLng target;
+  final Widget pin;
+  const _MemberMarkerSpec({
+    required this.uid,
+    required this.target,
+    required this.pin,
+  });
+}
+
+/// Renders other members' markers and smoothly glides each one from its
+/// previous position to the new one whenever a fresh location fix arrives,
+/// instead of letting it jump (Google-Maps-style continuous movement).
+class _AnimatedMemberMarkers extends StatefulWidget {
+  final List<_MemberMarkerSpec> specs;
+  final double counterRotation;
+  const _AnimatedMemberMarkers({
+    required this.specs,
+    required this.counterRotation,
+  });
+
+  @override
+  State<_AnimatedMemberMarkers> createState() => _AnimatedMemberMarkersState();
+}
+
+class _AnimatedMemberMarkersState extends State<_AnimatedMemberMarkers>
+    with SingleTickerProviderStateMixin {
+  static const Duration _glide = Duration(milliseconds: 900);
+
+  // A single shared ticker drives every member's glide, so we rebuild the
+  // marker layer at most once per frame no matter how many members there are.
+  late final AnimationController _controller;
+
+  // Per-member glide endpoints. On each fix we snapshot where the marker is
+  // now (_from) and where it's heading (_to); build() lerps by _controller.value.
+  final Map<String, LatLng> _from = <String, LatLng>{};
+  final Map<String, LatLng> _to = <String, LatLng>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: _glide)
+      ..addListener(() {
+        if (mounted) setState(() {});
+      });
+    for (final _MemberMarkerSpec s in widget.specs) {
+      _from[s.uid] = s.target;
+      _to[s.uid] = s.target;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedMemberMarkers old) {
+    super.didUpdateWidget(old);
+
+    // Freeze current on-screen positions as the new "from", set new targets as
+    // "to", and (re)start the shared glide only if something actually moved.
+    final Set<String> present = <String>{};
+    bool changed = false;
+    final double t = _controller.value;
+    for (final _MemberMarkerSpec s in widget.specs) {
+      present.add(s.uid);
+      final LatLng? to = _to[s.uid];
+      if (to == null) {
+        // New member — place without animating.
+        _from[s.uid] = s.target;
+        _to[s.uid] = s.target;
+        continue;
+      }
+      if (to.latitude == s.target.latitude &&
+          to.longitude == s.target.longitude) {
+        continue; // target unchanged — no restart (ignores heading-only rebuilds)
+      }
+      final LatLng from = _from[s.uid] ?? to;
+      // Current interpolated position becomes the new glide start.
+      _from[s.uid] = LatLng(
+        from.latitude + (to.latitude - from.latitude) * t,
+        from.longitude + (to.longitude - from.longitude) * t,
+      );
+      _to[s.uid] = s.target;
+      changed = true;
+    }
+    // Drop members who left.
+    _from.removeWhere((String uid, _) => !present.contains(uid));
+    _to.removeWhere((String uid, _) => !present.contains(uid));
+
+    if (changed) _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double t = _controller.value;
+    final List<Marker> markers = <Marker>[];
+    for (final _MemberMarkerSpec s in widget.specs) {
+      final LatLng from = _from[s.uid] ?? s.target;
+      final LatLng to = _to[s.uid] ?? s.target;
+      final LatLng point = LatLng(
+        from.latitude + (to.latitude - from.latitude) * t,
+        from.longitude + (to.longitude - from.longitude) * t,
+      );
+      markers.add(
+        Marker(
+          key: ValueKey<String>(s.uid),
+          point: point,
+          width: 80,
+          height: 80,
+          child: Transform.rotate(angle: widget.counterRotation, child: s.pin),
+        ),
+      );
+    }
+    return MarkerLayer(markers: markers);
+  }
+}
+
 /// A Google-Maps-style rider pin: a circular profile photo (or colored
 /// initial) ringed in the member's color, with a heading arrow and a tiny
 /// speed label. Scales in when first shown.
@@ -903,4 +1183,198 @@ class _ArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ArrowPainter old) => old.color != color;
+}
+
+/// Modern map control button with gradient background and smooth animations.
+class _MapControlButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool isPrimary;
+
+  const _MapControlButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.isPrimary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Tooltip(
+      message: tooltip,
+      preferBelow: false,
+      verticalOffset: -40,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: isPrimary
+                  ? LinearGradient(
+                      colors: AppColors.brandGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              color: isPrimary
+                  ? null
+                  : (isDark ? scheme.surfaceContainerHigh : scheme.surface),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: isPrimary
+                      ? AppColors.primaryGlow
+                      : Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: isPrimary
+                  ? null
+                  : Border.all(
+                      color: scheme.outlineVariant.withValues(
+                        alpha: isDark ? 0.2 : 0.1,
+                      ),
+                      width: 1,
+                    ),
+            ),
+            child: Icon(
+              icon,
+              color: isPrimary ? Colors.white : scheme.primary,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Modern zoom control pill with zoom level indicator.
+class _MapControlPill extends StatelessWidget {
+  final double zoomLevel;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  const _MapControlPill({
+    required this.zoomLevel,
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: 56,
+      decoration: BoxDecoration(
+        color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: isDark ? 0.2 : 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // Zoom in button
+          Tooltip(
+            message: 'Zoom in',
+            preferBelow: false,
+            verticalOffset: -40,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onZoomIn();
+              },
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              child: Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: AppColors.seed,
+                  size: 26,
+                ),
+              ),
+            ),
+          ),
+          // Zoom level indicator
+          Container(
+            width: 40,
+            height: 24,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                zoomLevel.toStringAsFixed(0),
+                style: GoogleFonts.poppins(
+                  color: scheme.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          // Divider
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 14),
+            color: scheme.outlineVariant.withValues(alpha: 0.2),
+          ),
+          // Zoom out button
+          Tooltip(
+            message: 'Zoom out',
+            preferBelow: false,
+            verticalOffset: -40,
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onZoomOut();
+              },
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(20),
+              ),
+              child: Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.remove_rounded,
+                  color: AppColors.seed,
+                  size: 26,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
