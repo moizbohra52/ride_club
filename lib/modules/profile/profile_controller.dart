@@ -10,6 +10,8 @@ import '../../core/utils/validators.dart';
 import '../../models/app_user.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
+import '../../services/local_alerts_service.dart';
+import '../../services/ride_service.dart';
 import '../../services/user_service.dart';
 
 /// Edit the signed-in user's profile (name, photo, emergency contact) and
@@ -18,6 +20,7 @@ import '../../services/user_service.dart';
 class ProfileController extends GetxController {
   final AuthService _auth = Get.find<AuthService>();
   final UserService _users = Get.find<UserService>();
+  final RideService _rides = Get.find<RideService>();
   final ImagePicker _picker = ImagePicker();
 
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
@@ -108,17 +111,27 @@ class ProfileController extends GetxController {
           ? null
           : emergencyField.text.trim();
 
+      final String newName = nameField.text.trim();
       await _users.save(
         AppUser(
           uid: uid,
           email: emailValue,
           phone: phone,
-          name: nameField.text.trim(),
+          name: newName,
           photoUrl: photoUrl,
           emergencyContact: emergency,
         ),
         isNew: false,
       );
+
+      // Push the new name/photo into every ride the user is already in, so old
+      // rides don't keep showing the stale snapshot. Best-effort: don't fail
+      // the whole save if this sync hiccups.
+      try {
+        await _rides.syncMemberProfile(name: newName, photoUrl: photoUrl);
+      } catch (e, s) {
+        Log.e('ride member profile sync failed', error: e, stack: s);
+      }
 
       // Reflect the saved state in the UI and stay on the screen.
       existingPhotoUrl.value = photoUrl;
@@ -141,6 +154,7 @@ class ProfileController extends GetxController {
       destructive: true,
     );
     if (!ok) return;
+    Get.find<LocalAlertsService>().stop();
     await _auth.signOut();
     Get.offAllNamed(Routes.login);
   }

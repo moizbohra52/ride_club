@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_elevation.dart';
-import '../core/theme/app_radius.dart';
 import '../core/theme/app_typography.dart';
 
 /// The app's primary call-to-action: a full-width gradient button with the
@@ -48,7 +47,7 @@ class GradientButton extends StatelessWidget {
       opacity: enabled ? 1 : 0.5,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: AppRadius.mdRadius,
+          borderRadius: BorderRadius.circular(height / 2),
           gradient: LinearGradient(
             colors: gradient,
             begin: Alignment.topLeft,
@@ -59,7 +58,7 @@ class GradientButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: AppRadius.mdRadius,
+            borderRadius: BorderRadius.circular(height / 2),
             onTap: enabled
                 ? () {
                     HapticFeedback.mediumImpact();

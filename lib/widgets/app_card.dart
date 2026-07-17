@@ -29,27 +29,29 @@ class AppCard extends StatelessWidget {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Widget content = Row(
-      children: <Widget>[
-        if (accentColor != null)
-          Container(
-            width: 4,
-            height: 78,
-            decoration: BoxDecoration(
-              color: accentColor,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(AppRadius.lg),
-                bottomLeft: Radius.circular(AppRadius.lg),
+    final Widget content = IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (accentColor != null)
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.lg),
+                  bottomLeft: Radius.circular(AppRadius.lg),
+                ),
               ),
             ),
+          Expanded(
+            child: Padding(
+              padding: padding ?? const EdgeInsets.all(AppSpacing.lg),
+              child: child,
+            ),
           ),
-        Expanded(
-          child: Padding(
-            padding: padding ?? const EdgeInsets.all(AppSpacing.lg),
-            child: child,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
 
     final Decoration decoration = BoxDecoration(
@@ -58,9 +60,7 @@ class AppCard extends StatelessWidget {
       border: Border.all(
         color: scheme.outlineVariant.withValues(alpha: isDark ? 0.3 : 0.15),
       ),
-      boxShadow: AppElevation.soft(
-        isDark ? Colors.black : scheme.primary,
-      ),
+      boxShadow: AppElevation.soft(isDark ? Colors.black : scheme.primary),
     );
 
     if (onTap == null) {

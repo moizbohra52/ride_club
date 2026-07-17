@@ -6,6 +6,7 @@ import '../../core/utils/ui_helpers.dart';
 import '../../models/app_user.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
+import '../../services/local_alerts_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/user_service.dart';
 
@@ -44,6 +45,8 @@ class AuthController extends GetxController {
     final User user = cred.user!;
     // Register for notifications + save FCM token (fire-and-forget).
     Get.find<NotificationService>().init();
+    // Start client-side local alerts (free-plan push replacement).
+    Get.find<LocalAlertsService>().start();
     try {
       final AppUser? existing = await _users.fetch(user.uid);
 

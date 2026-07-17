@@ -12,6 +12,7 @@ import 'routes/app_pages.dart';
 import 'services/auth_service.dart';
 import 'services/chat_service.dart';
 import 'services/geo_service.dart';
+import 'services/local_alerts_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'services/ride_location_service.dart';
@@ -93,6 +94,7 @@ Future<void> main() async {
   Get.put<ChatService>(ChatService(), permanent: true);
   Get.put<SosService>(SosService(), permanent: true);
   Get.put<NotificationService>(NotificationService(), permanent: true);
+  Get.put<LocalAlertsService>(LocalAlertsService(), permanent: true);
 
   runApp(const RideClubApp());
 }

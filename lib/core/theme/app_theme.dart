@@ -92,7 +92,9 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        fillColor: isDark
+            ? scheme.surfaceContainerHighest.withValues(alpha: 0.5)
+            : AppColors.surfaceTintLight,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         floatingLabelBehavior: FloatingLabelBehavior.auto,
@@ -107,13 +109,13 @@ class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.lgRadius,
           borderSide: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: 0.4),
-            width: 1.5,
+            color: scheme.outlineVariant.withValues(alpha: isDark ? 0.4 : 0.25),
+            width: 1.2,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.lgRadius,
-          borderSide: BorderSide(color: scheme.primary, width: 2),
+          borderSide: BorderSide(color: scheme.primary, width: 1.8),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.lgRadius,
@@ -143,10 +145,10 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: scheme.primary,
+          foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(54),
-          shape: RoundedRectangleBorder(
-            borderRadius: AppRadius.mdRadius,
-          ),
+          shape: const StadiumBorder(),
           textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -156,11 +158,20 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(54),
-          shape: RoundedRectangleBorder(
-            borderRadius: AppRadius.mdRadius,
-          ),
+          side: BorderSide(color: scheme.primary, width: 1.4),
+          foregroundColor: scheme.primary,
+          shape: const StadiumBorder(),
           textStyle: GoogleFonts.poppins(
             fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: scheme.primary,
+          textStyle: GoogleFonts.poppins(
+            fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -248,17 +259,26 @@ class AppTheme {
         side: BorderSide.none,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: scheme.primaryContainer,
-        foregroundColor: scheme.primary,
+        backgroundColor: scheme.primary,
+        foregroundColor: Colors.white,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.mdRadius,
-        ),
+        shape: const CircleBorder(),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: isDark
+            ? scheme.surfaceContainerHigh
+            : scheme.inverseSurface,
+        contentTextStyle: GoogleFonts.poppins(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w500,
+          color: isDark ? scheme.onSurface : scheme.onInverseSurface,
+        ),
+        actionTextColor: scheme.primary,
+        insetPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        elevation: 6,
         shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant.withValues(alpha: 0.5),

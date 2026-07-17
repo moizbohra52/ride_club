@@ -1,6 +1,6 @@
 {
   "name": "ridetogether-functions",
-  "description": "RideTogether Cloud Functions (SOS push).",
+  "description": "RideClub Cloud Functions — push for SOS, chat, join/accept, member-joined, ride-ended + profile sync.",
   "engines": {
     "node": "20"
   },

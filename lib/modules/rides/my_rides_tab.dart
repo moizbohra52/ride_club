@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
+
 import '../../models/ride.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';

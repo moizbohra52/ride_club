@@ -101,6 +101,37 @@ class RideService extends GetxService {
     return ride;
   }
 
+  /// Propagate the signed-in user's updated [name]/[photoUrl] to their member
+  /// document in every ride they belong to. Ride member docs store the name and
+  /// photo as a snapshot taken at join time, so without this an edited profile
+  /// would keep showing the old name/photo in existing rides.
+  ///
+  /// Uses the user's `rideRefs` list to find their rides, then batch-updates
+  /// each `rides/{rideId}/members/{uid}`. Best-effort: a failure here must not
+  /// block the profile save, so callers may ignore thrown errors.
+  Future<void> syncMemberProfile({
+    required String name,
+    String? photoUrl,
+  }) async {
+    final String? uid = _auth.uid;
+    if (uid == null) return;
+
+    final QuerySnapshot<Map<String, dynamic>> refs = await _rideRefs(
+      uid,
+    ).get().timeout(_timeout);
+    if (refs.docs.isEmpty) return;
+
+    final WriteBatch batch = _db.batch();
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> ref in refs.docs) {
+      batch.set(
+        _rides.doc(ref.id).collection('members').doc(uid),
+        <String, dynamic>{'name': name, 'photoUrl': photoUrl},
+        SetOptions(merge: true),
+      );
+    }
+    await batch.commit().timeout(_timeout);
+  }
+
   Stream<List<Ride>> watchMyRides() {
     final String? uid = _auth.uid;
     if (uid == null) return const Stream<List<Ride>>.empty();

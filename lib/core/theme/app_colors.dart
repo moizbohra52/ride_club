@@ -5,91 +5,132 @@ import 'package:flutter/material.dart';
 /// [seed] drives the Material 3 [ColorScheme] for both light and dark themes.
 /// [memberColors] are assigned round-robin to ride members so each rider gets a
 /// distinct, high-contrast marker on the map (used from Phase 3 onward).
+///
+/// The palette is a warm coral/salmon system: a single confident coral accent
+/// on soft near-white surfaces, matching the app's light, friendly identity.
 class AppColors {
   AppColors._();
 
-  /// Brand seed — a confident travel-blue ("sky").
-  static const Color seed = Color(0xFF2563EB);
+  /// Brand seed — a warm coral ("salmon"). The one accent that carries the app.
+  static const Color seed = Color(0xFFEE8B7B);
 
-  /// Deep midnight blue — the "night ride" ink, used for strong text on light.
-  static const Color ink = Color(0xFF0F1B2D);
+  /// Deeper coral — pressed states / gradient end / strong accents.
+  static const Color coralDark = Color(0xFFE5735F);
 
-  /// Warm sunset orange — the adventure accent. Used sparingly for the one
-  /// element that should pop (primary CTA glow, active markers).
-  static const Color sunset = Color(0xFFF97316);
+  /// Soft coral — subtle fills, tints, disabled accents.
+  static const Color coralSoft = Color(0xFFF6B3A6);
 
-  static const Color success = Color(0xFF16A34A);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color danger = Color(0xFFDC2626);
+  /// Near-black warm ink — strong text on light surfaces.
+  static const Color ink = Color(0xFF2E2E3A);
 
-  /// SOS button color — deliberately the most saturated red in the app.
-  static const Color sos = Color(0xFFE11D48);
+  /// Warm sunset accent kept as a secondary highlight (rarely used now that
+  /// coral is the hero — retained so existing `.accent` call-sites still work).
+  static const Color sunset = Color(0xFFF6A560);
 
-  /// Tonal accent for headers/badges that previously duplicated
-  /// [brandGradient] purely for emphasis (profile header, avatar badge, host
-  /// markers). Solid, not a gradient — reserves the gradient for the two
-  /// true hero moments (login hero, ride-code card).
-  static const Color surfaceAccent = Color(0xFF3B5DE0);
+  static const Color success = Color(0xFF34C759);
+  static const Color warning = Color(0xFFF5A623);
+  static const Color danger = Color(0xFFE5484D);
+
+  /// SOS button color — the most saturated red in the app.
+  static const Color sos = Color(0xFFE63950);
+
+  /// Tonal accent for headers/badges — a solid coral, not a gradient, so the
+  /// gradient stays reserved for true hero moments.
+  static const Color surfaceAccent = Color(0xFFEE8B7B);
 
   // ── Gradient pairs ────────────────────────────────────────────────────────
 
-  /// Primary brand gradient (hero backgrounds, CTA buttons).
+  /// Primary brand gradient (hero backgrounds, CTA buttons) — coral shades.
   static const List<Color> brandGradient = <Color>[
-    Color(0xFF1D4ED8), // deeper blue
-    Color(0xFF3B82F6), // lighter sky blue
+    Color(0xFFF19A88), // light coral
+    Color(0xFFE5735F), // deeper coral
   ];
 
   /// Sunset accent gradient (special CTAs, highlights).
   static const List<Color> accentGradient = <Color>[
-    Color(0xFFEA580C), // warm orange
-    Color(0xFFF97316), // bright sunset
+    Color(0xFFF6A560), // warm apricot
+    Color(0xFFEE8B7B), // coral
   ];
 
-  /// Midnight gradient for dark splash / hero areas.
+  /// Warm dark gradient for dark splash / hero areas.
   static const List<Color> midnightGradient = <Color>[
-    Color(0xFF0F172A), // near-black slate
-    Color(0xFF1E3A5F), // deep ocean blue
+    Color(0xFF2A2530), // warm near-black
+    Color(0xFF4A3A3A), // deep warm brown-grey
   ];
 
   // ── Surface tints ─────────────────────────────────────────────────────────
 
-  /// Subtle blue tint for light-mode card backgrounds.
-  static const Color surfaceTintLight = Color(0xFFF0F5FF);
+  /// Subtle warm tint for light-mode card backgrounds.
+  static const Color surfaceTintLight = Color(0xFFFFF6F4);
 
-  /// Subtle blue tint for dark-mode card backgrounds.
-  static const Color surfaceTintDark = Color(0xFF1A2332);
+  /// Subtle warm tint for dark-mode card backgrounds.
+  static const Color surfaceTintDark = Color(0xFF2A2224);
 
   // ── Glow / shimmer ────────────────────────────────────────────────────────
 
-  /// Soft glow for primary CTA shadows.
-  static const Color primaryGlow = Color(0x402563EB);
+  /// Soft glow for primary CTA shadows (coral, ~25% alpha).
+  static const Color primaryGlow = Color(0x40EE8B7B);
 
   /// Soft glow for sunset accent shadows.
-  static const Color accentGlow = Color(0x40F97316);
+  static const Color accentGlow = Color(0x40F6A560);
 
-  /// Muted on-surface tone (≈60% onSurfaceVariant) for secondary/metadata text.
-  /// Use instead of hand-tuned `withValues(alpha: 0.5)` so the same muted
-  /// contrast is applied consistently across light & dark themes.
-  static const Color onSurfaceMuted = Color(0x991F2937);
+  /// Muted on-surface tone (≈60%) for secondary/metadata text. Use instead of
+  /// hand-tuned `withValues(alpha: 0.5)` so the same muted contrast is applied
+  /// consistently across light & dark themes.
+  static const Color onSurfaceMuted = Color(0x992E2E3A);
 
   /// Translucent surface tint used for glass/blur overlays floating above the
   /// map (info card, members bar, SOS banner).
   static const Color glassLight = Color(0xF2FFFFFF);
-  static const Color glassDark = Color(0xF21A2332);
+  static const Color glassDark = Color(0xF22A2224);
 
-  /// Distinct marker colors for ride members. 10 visually separable hues.
+  // ── Route line colors (live map polylines) ─────────────────────────────────
+
+  /// Route line color for the current user's own path — a decent, dark warm
+  /// slate that reads clearly on both light and dark tiles without glowing.
+  static const Color routeLine = Color(0xFF5A3E38);
+
+  /// Casing/outline drawn under [routeLine] (and member route lines).
+  static const Color routeCasing = Color(0xFFFFFFFF);
+
+  /// Distinct marker colors for ride members. 10 visually separable hues, tuned
+  /// to sit harmoniously alongside the coral brand.
   static const List<Color> memberColors = <Color>[
-    Color(0xFF2563EB), // blue
-    Color(0xFFDC2626), // red
-    Color(0xFF16A34A), // green
-    Color(0xFF9333EA), // purple
-    Color(0xFFEA580C), // orange
-    Color(0xFF0891B2), // cyan
-    Color(0xFFDB2777), // pink
-    Color(0xFF65A30D), // lime
-    Color(0xFF7C3AED), // violet
-    Color(0xFF0D9488), // teal
+    Color(0xFFEE8B7B), // coral (brand)
+    Color(0xFF4E9DE0), // sky blue
+    Color(0xFF34C759), // green
+    Color(0xFF9B6DDB), // purple
+    Color(0xFFF6A560), // apricot
+    Color(0xFF17A2A2), // teal
+    Color(0xFFE86AA6), // pink
+    Color(0xFF8FB93E), // lime
+    Color(0xFF6C7BE0), // indigo
+    Color(0xFFD9534F), // brick red
   ];
+
+  /// Darkened, muted variants of [memberColors] for polylines — same hue
+  /// identity as each member's marker, but toned down so lines stay dark and
+  /// never glow.
+  static const List<Color> memberRouteColors = <Color>[
+    Color(0xFFB5503E), // coral
+    Color(0xFF2C5F8A), // blue
+    Color(0xFF1E7A38), // green
+    Color(0xFF5B3E8A), // purple
+    Color(0xFFB56A25), // apricot
+    Color(0xFF0F6060), // teal
+    Color(0xFF9B3B68), // pink
+    Color(0xFF556E1F), // lime
+    Color(0xFF3D479B), // indigo
+    Color(0xFF8A2F2C), // brick red
+  ];
+
+  /// Darkened, muted route-line color for a member key (matches
+  /// [memberColorForKey] hue selection).
+  static Color memberRouteColorForKey(String key) {
+    if (key.isEmpty) return memberRouteColors.first;
+    final int hash = key.codeUnits.fold(0, (int acc, int c) => acc + c);
+    return memberRouteColors[hash % memberRouteColors.length];
+  }
 
   /// Deterministically pick a member color from an index (e.g. join order).
   static Color memberColorAt(int index) =>

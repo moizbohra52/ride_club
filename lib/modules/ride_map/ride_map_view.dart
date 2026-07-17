@@ -90,7 +90,7 @@ class RideMapView extends GetView<RideMapController> {
               mapController: controller.mapController,
               options: MapOptions(
                 initialCenter: center,
-                initialZoom: 16.5,
+                initialZoom: 12,
                 onPositionChanged: (MapCamera camera, bool hasGesture) {
                   controller.updateZoomLevel(camera.zoom);
                   if (hasGesture) controller.onMapDragged();
@@ -134,102 +134,115 @@ class RideMapView extends GetView<RideMapController> {
                 ),
               ],
             ),
-            // SafeArea around widget overlays to prevent status/navigation bar clipping
+            // Overlay chrome. Everything anchors to top or bottom via Columns
+            // (not fixed pixel offsets) so nothing overlaps on any screen size
+            // and the map stays as large as possible.
             Positioned.fill(
               child: SafeArea(
-                child: Stack(
+                child: Column(
                   children: <Widget>[
-                    Positioned(
-                      top: 12,
-                      left: 16,
-                      right: 16,
-                      child: _infoCard(context),
-                    ),
-                    // Right-side controls: Zoom (pill) + Fit all + Recenter (bottom)
-                    Positioned(
-                      right: 16,
-                      bottom: 168,
+                    // ── Top: info card, then SOS banner stacked below it ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          // Zoom in/out vertical pill with zoom level indicator
+                          _infoCard(context),
                           Obx(
-                            () => _MapControlPill(
-                              zoomLevel: controller.zoomLevel.value,
-                              onZoomIn: () =>
-                                  controller.zoomIn(keepFollowing: true),
-                              onZoomOut: () =>
-                                  controller.zoomOut(keepFollowing: true),
-                            ),
+                            () => controller.iHaveActiveSos
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: _sosBanner(),
+                                  )
+                                : const SizedBox.shrink(),
                           ),
-                          const SizedBox(height: 12),
-                          // Fit all button
-                          _MapControlButton(
-                            icon: Icons.fit_screen_rounded,
-                            tooltip: 'Fit all riders',
-                            onTap: controller.fitAll,
-                          ),
-                          const SizedBox(height: 12),
-                          // Recenter button — appears the instant the user
-                          // moves the map (pan/zoom/rotate), like Google Maps,
-                          // and hides again once they recenter.
-                          Obx(() {
-                            final bool show = controller.showRecenter.value;
-                            return IgnorePointer(
-                              ignoring: !show,
-                              child: AnimatedOpacity(
-                                opacity: show ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 150),
-                                child: AnimatedScale(
-                                  scale: show ? 1.0 : 0.0,
-                                  duration: const Duration(milliseconds: 150),
-                                  curve: Curves.easeOutBack,
-                                  child: _MapControlButton(
-                                    icon: Icons.my_location_rounded,
-                                    tooltip: 'Recenter map',
-                                    onTap: controller.recenter,
-                                    isPrimary: true,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
                         ],
                       ),
                     ),
-                    Positioned(
-                      left: 16,
-                      bottom: 148,
-                      child: _pulsingSosFab(onPressed: controller.sendSos),
-                    ),
-                    Obx(
-                      () => controller.iHaveActiveSos
-                          ? Positioned(
-                              top: 80,
-                              left: 16,
-                              right: 16,
-                              child: _sosBanner(),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                    // Start / Stop navigation control, just above the members
-                    // bar. Big brand "Start" until the user begins tracking,
-                    // then a compact "End" pill.
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 80,
-                      child: Obx(
-                        () => controller.isTracking.value
-                            ? _stopNavButton(context)
-                            : _startNavButton(context),
+
+                    const Spacer(),
+
+                    // ── Right-side floating controls, sitting just above the
+                    // bottom bar (SOS on the left of the same row). ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: <Widget>[
+                          _pulsingSosFab(onPressed: controller.sendSos),
+                          const Spacer(),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              // Recenter — appears the instant the user moves
+                              // the map (pan/zoom/rotate), Google-Maps-style.
+                              Obx(() {
+                                final bool show = controller.showRecenter.value;
+                                return IgnorePointer(
+                                  ignoring: !show,
+                                  child: AnimatedOpacity(
+                                    opacity: show ? 1.0 : 0.0,
+                                    duration: const Duration(milliseconds: 150),
+                                    child: AnimatedScale(
+                                      scale: show ? 1.0 : 0.0,
+                                      duration: const Duration(
+                                        milliseconds: 150,
+                                      ),
+                                      curve: Curves.easeOutBack,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 10,
+                                        ),
+                                        child: _MapControlButton(
+                                          icon: Icons.my_location_rounded,
+                                          tooltip: 'Recenter map',
+                                          onTap: controller.recenter,
+                                          isPrimary: true,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              _MapControlButton(
+                                icon: Icons.fit_screen_rounded,
+                                tooltip: 'Fit all riders',
+                                onTap: controller.fitAll,
+                              ),
+                              const SizedBox(height: 10),
+                              Obx(
+                                () => _MapControlPill(
+                                  zoomLevel: controller.zoomLevel.value,
+                                  onZoomIn: () =>
+                                      controller.zoomIn(keepFollowing: true),
+                                  onZoomOut: () =>
+                                      controller.zoomOut(keepFollowing: true),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    Positioned(
-                      left: 16,
-                      right: 16,
-                      bottom: 16,
-                      child: _membersBar(context),
+
+                    // ── Bottom bar: Start/Stop + Members ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: Obx(
+                        () => Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Expanded(
+                              flex: 2,
+                              child: controller.isTracking.value
+                                  ? _stopNavButton(context)
+                                  : _startNavButton(context),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(flex: 3, child: _membersBar(context)),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -245,44 +258,40 @@ class RideMapView extends GetView<RideMapController> {
     label: 'Start',
     icon: Icons.navigation_rounded,
     onTap: controller.startTracking,
+    height: 50,
   );
 
   Widget _stopNavButton(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    // Solid, filled "End" button: a soft red that reads as the stop state
+    // without competing with the SOS control. Same height/shape as Start.
+    const Color stopColor = AppColors.danger;
     return Material(
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      elevation: 4,
+      shadowColor: stopColor.withValues(alpha: 0.35),
       borderRadius: BorderRadius.circular(16),
-      color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
+      color: stopColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
           HapticFeedback.lightImpact();
           controller.stopTracking();
         },
-        child: Container(
+        child: SizedBox(
           height: 50,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(
-                alpha: isDark ? 0.3 : 0.15,
-              ),
-            ),
-          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(Icons.close_rounded, color: scheme.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'End navigation',
-                style: GoogleFonts.poppins(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+              const Icon(Icons.stop_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'End',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ],
@@ -296,72 +305,75 @@ class RideMapView extends GetView<RideMapController> {
     final List<Polyline> lines = <Polyline>[];
     final List<LatLng>? planned = controller.plannedRoute.value;
 
+    // Thick, solid, dark decent lines — no alpha glow layers. Each route is a
+    // white casing (edge) under one solid colored line.
+    const double casingWidth = 11;
+    const double lineWidth = 7;
+    const double memberCasingWidth = 9;
+    const double memberLineWidth = 5.5;
+
     if (planned != null && planned.length >= 2) {
-      // Draw planned route background first
+      // Current user's path on the planned route.
       lines.add(
         Polyline(
           points: planned,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.4)
-              : AppColors.ink.withValues(alpha: 0.35),
-          strokeWidth: 6,
+          color: AppColors.routeCasing.withValues(alpha: isDark ? 0.25 : 0.9),
+          strokeWidth: casingWidth,
         ),
       );
-
-      // Draw current user's path on planned route
-      final Color myColor = isDark ? Colors.white : AppColors.seed;
       lines.add(
         Polyline(
           points: planned,
-          color: myColor.withValues(alpha: isDark ? 0.4 : 0.25),
-          strokeWidth: 12,
+          color: isDark ? AppColors.coralSoft : AppColors.routeLine,
+          strokeWidth: lineWidth,
         ),
       );
-      lines.add(Polyline(points: planned, color: myColor, strokeWidth: 6));
 
-      // Draw other members' paths on the same planned route with offsets
+      // Other members' paths on the same planned route, offset per member.
       final List<MemberLocation> otherMembers = controller.members
           .where((MemberLocation m) => m.uid != controller.uid)
           .toList();
       for (final MemberLocation m in otherMembers) {
-        final Color memberColor = AppColors.memberColorForKey(m.uid);
+        final Color memberColor = AppColors.memberRouteColorForKey(m.uid);
         final double offsetAmount = _offsetAmountFor(m.uid);
         final List<LatLng> offsetPoints = _offsetPoints(planned, offsetAmount);
 
         lines.add(
           Polyline(
             points: offsetPoints,
-            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
-            strokeWidth: 10,
+            color: AppColors.routeCasing.withValues(alpha: isDark ? 0.2 : 0.8),
+            strokeWidth: memberCasingWidth,
           ),
         );
         lines.add(
-          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+          Polyline(
+            points: offsetPoints,
+            color: memberColor,
+            strokeWidth: memberLineWidth,
+          ),
         );
       }
     } else {
-      // Fallback: draw individual routes when no planned route exists
+      // Fallback: draw individual routes when no planned route exists.
       final RouteResult? myR = controller.myRoute.value;
       if (myR != null) {
         lines.add(
           Polyline(
             points: myR.points,
-            color: isDark
-                ? AppColors.seed.withValues(alpha: 0.4)
-                : AppColors.seed.withValues(alpha: 0.25),
-            strokeWidth: 12,
+            color: AppColors.routeCasing.withValues(alpha: isDark ? 0.25 : 0.9),
+            strokeWidth: casingWidth,
           ),
         );
         lines.add(
           Polyline(
             points: myR.points,
-            color: isDark ? Colors.white : AppColors.seed,
-            strokeWidth: 6,
+            color: isDark ? AppColors.coralSoft : AppColors.routeLine,
+            strokeWidth: lineWidth,
           ),
         );
       }
       controller.memberRoutes.forEach((String uid, RouteResult route) {
-        final Color memberColor = AppColors.memberColorForKey(uid);
+        final Color memberColor = AppColors.memberRouteColorForKey(uid);
         final double offsetAmount = _offsetAmountFor(uid);
         final List<LatLng> offsetPoints = _offsetPoints(
           route.points,
@@ -371,12 +383,16 @@ class RideMapView extends GetView<RideMapController> {
         lines.add(
           Polyline(
             points: offsetPoints,
-            color: memberColor.withValues(alpha: isDark ? 0.45 : 0.3),
-            strokeWidth: 10,
+            color: AppColors.routeCasing.withValues(alpha: isDark ? 0.2 : 0.8),
+            strokeWidth: memberCasingWidth,
           ),
         );
         lines.add(
-          Polyline(points: offsetPoints, color: memberColor, strokeWidth: 5),
+          Polyline(
+            points: offsetPoints,
+            color: memberColor,
+            strokeWidth: memberLineWidth,
+          ),
         );
       });
     }
@@ -483,17 +499,17 @@ class RideMapView extends GetView<RideMapController> {
         text = 'Finding your route…';
       }
       return GlassCard(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: <Widget>[
-            Icon(Icons.navigation_rounded, color: scheme.primary, size: 22),
-            const SizedBox(width: 12),
+            Icon(Icons.navigation_rounded, color: scheme.primary, size: 20),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 text,
                 style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                   color: scheme.onSurface,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -562,6 +578,10 @@ class RideMapView extends GetView<RideMapController> {
       final RideMember? myProfile = controller.uid == null
           ? null
           : controller.rideMemberFor(controller.uid!);
+      // Following myself while navigating → show the direction arrow instead
+      // of my profile pin.
+      final bool arrowMode =
+          controller.isTracking.value && controller.followTarget.value == null;
       markers.add(
         Marker(
           key: const ValueKey('my_location'),
@@ -577,6 +597,7 @@ class RideMapView extends GetView<RideMapController> {
               isMe: true,
               photoUrl: myProfile?.photoUrl,
               name: myProfile?.name ?? 'Me',
+              arrowMode: arrowMode,
             ),
           ),
         ),
@@ -680,6 +701,14 @@ class RideMapView extends GetView<RideMapController> {
               isMe: false,
               photoUrl: profile?.photoUrl,
               name: resolved.name,
+              // While navigating and following THIS member: show the direction
+              // arrow when they're online and moving; fall back to the profile
+              // pin when they're offline (or standing still).
+              arrowMode:
+                  controller.isTracking.value &&
+                  controller.followTarget.value == m.uid &&
+                  m.online &&
+                  m.speedKmh >= 1,
             ),
           ),
         ),
@@ -692,24 +721,40 @@ class RideMapView extends GetView<RideMapController> {
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
     return GlassCard(
-      borderRadius: BorderRadius.circular(18),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      borderRadius: BorderRadius.circular(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       onTap: () => _showMembers(context),
       child: Obx(
         () => Row(
           children: <Widget>[
-            Icon(Icons.group_rounded, color: scheme.primary),
-            const SizedBox(width: 12),
+            Icon(Icons.group_rounded, color: scheme.primary, size: 20),
+            const SizedBox(width: 8),
             Text(
-              '${controller.members.length} on the map',
+              '${controller.members.length}',
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
                 color: scheme.onSurface,
               ),
             ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                'riders',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                  color: scheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const Spacer(),
-            Icon(Icons.expand_less_rounded, color: scheme.onSurfaceVariant),
+            Icon(
+              Icons.expand_less_rounded,
+              color: scheme.onSurfaceVariant,
+              size: 20,
+            ),
           ],
         ),
       ),
@@ -968,6 +1013,11 @@ class _MemberPin extends StatelessWidget {
   final bool isMe;
   final String? photoUrl;
   final String name;
+
+  /// When true, render a bold navigation direction arrow (Google-Maps
+  /// nav-style) instead of the profile avatar — used for the member being
+  /// actively followed while they're online and moving.
+  final bool arrowMode;
   const _MemberPin({
     required this.color,
     required this.heading,
@@ -975,10 +1025,12 @@ class _MemberPin extends StatelessWidget {
     required this.isMe,
     required this.photoUrl,
     required this.name,
+    this.arrowMode = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (arrowMode) return _directionArrow();
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0.7, end: 1),
       duration: const Duration(milliseconds: 350),
@@ -1077,6 +1129,51 @@ class _MemberPin extends StatelessWidget {
       ),
     ),
   );
+
+  /// Bold nav-style direction arrow, rotated to [heading], with an optional
+  /// speed chip below — replaces the avatar for the actively-followed rider.
+  Widget _directionArrow() => TweenAnimationBuilder<double>(
+    tween: Tween<double>(begin: 0.7, end: 1),
+    duration: const Duration(milliseconds: 350),
+    curve: Curves.easeOutBack,
+    builder: (BuildContext context, double scale, Widget? child) =>
+        Transform.scale(scale: scale, child: child),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Transform.rotate(
+          angle: heading * math.pi / 180,
+          child: CustomPaint(
+            size: const Size(44, 44),
+            painter: _NavArrowPainter(color: color),
+          ),
+        ),
+        if (speedKmh >= 1)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              '${speedKmh.toStringAsFixed(0)} km/h',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// Small direction triangle drawn at the top of the pin (points "up" at
@@ -1099,6 +1196,48 @@ class _ArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ArrowPainter old) => old.color != color;
+}
+
+/// A bold, filled navigation arrow (Google-Maps nav-style) inside a soft white
+/// ring — points "up" at heading 0; the parent Transform.rotate turns it to
+/// the real heading. Used for the actively-followed rider while moving.
+class _NavArrowPainter extends CustomPainter {
+  final Color color;
+  _NavArrowPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double cx = size.width / 2;
+    final double cy = size.height / 2;
+    final double r = size.width / 2;
+
+    // White circular backing so the arrow reads on any map tile.
+    canvas.drawCircle(
+      Offset(cx, cy),
+      r,
+      Paint()..color = Colors.white,
+    );
+    canvas.drawCircle(
+      Offset(cx, cy),
+      r,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.12)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Chevron/arrow pointing up.
+    final Path arrow = Path()
+      ..moveTo(cx, cy - r * 0.55) // tip
+      ..lineTo(cx - r * 0.5, cy + r * 0.5) // bottom-left
+      ..lineTo(cx, cy + r * 0.18) // notch
+      ..lineTo(cx + r * 0.5, cy + r * 0.5) // bottom-right
+      ..close();
+    canvas.drawPath(arrow, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _NavArrowPainter old) => old.color != color;
 }
 
 /// Modern map control button with gradient background and smooth animations.
@@ -1131,10 +1270,10 @@ class _MapControlButton extends StatelessWidget {
             HapticFeedback.lightImpact();
             onTap();
           },
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(15),
           child: Container(
-            width: 56,
-            height: 56,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               gradient: isPrimary
                   ? LinearGradient(
@@ -1146,14 +1285,14 @@ class _MapControlButton extends StatelessWidget {
               color: isPrimary
                   ? null
                   : (isDark ? scheme.surfaceContainerHigh : scheme.surface),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(15),
               boxShadow: <BoxShadow>[
                 BoxShadow(
                   color: isPrimary
                       ? AppColors.primaryGlow
-                      : Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                      : Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
               ],
               border: isPrimary
@@ -1168,7 +1307,7 @@ class _MapControlButton extends StatelessWidget {
             child: Icon(
               icon,
               color: isPrimary ? Colors.white : scheme.primary,
-              size: 24,
+              size: 22,
             ),
           ),
         ),
@@ -1195,15 +1334,15 @@ class _MapControlPill extends StatelessWidget {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      width: 56,
+      width: 46,
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHigh : scheme.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(15),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
         border: Border.all(
@@ -1225,34 +1364,34 @@ class _MapControlPill extends StatelessWidget {
                 onZoomIn();
               },
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
+                top: Radius.circular(15),
               ),
               child: Container(
-                width: 56,
-                height: 56,
+                width: 46,
+                height: 42,
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.add_rounded,
                   color: AppColors.seed,
-                  size: 26,
+                  size: 22,
                 ),
               ),
             ),
           ),
           // Zoom level indicator
           Container(
-            width: 40,
-            height: 24,
+            width: 32,
+            height: 20,
             decoration: BoxDecoration(
               color: scheme.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
               child: Text(
                 zoomLevel.toStringAsFixed(0),
                 style: GoogleFonts.poppins(
                   color: scheme.primary,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1261,7 +1400,7 @@ class _MapControlPill extends StatelessWidget {
           // Divider
           Container(
             height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: 14),
+            margin: const EdgeInsets.symmetric(horizontal: 12),
             color: scheme.outlineVariant.withValues(alpha: 0.2),
           ),
           // Zoom out button
@@ -1275,16 +1414,16 @@ class _MapControlPill extends StatelessWidget {
                 onZoomOut();
               },
               borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(20),
+                bottom: Radius.circular(15),
               ),
               child: Container(
-                width: 56,
-                height: 56,
+                width: 46,
+                height: 42,
                 alignment: Alignment.center,
                 child: const Icon(
                   Icons.remove_rounded,
                   color: AppColors.seed,
-                  size: 26,
+                  size: 22,
                 ),
               ),
             ),
@@ -1331,8 +1470,8 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 56,
-      height: 56,
+      width: 46,
+      height: 46,
       child: Stack(
         alignment: Alignment.center,
         children: <Widget>[
@@ -1341,8 +1480,8 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
             animation: _pulse,
             builder: (BuildContext context, Widget? child) {
               return Container(
-                width: 56,
-                height: 56,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: AppColors.sos.withValues(
@@ -1357,7 +1496,7 @@ class _SosFabState extends State<_SosFab> with SingleTickerProviderStateMixin {
             builder: (BuildContext context, Widget? child) {
               return Transform.scale(scale: _scale.value, child: child);
             },
-            child: FloatingActionButton(
+            child: FloatingActionButton.small(
               heroTag: 'sos',
               backgroundColor: AppColors.sos,
               elevation: 6,

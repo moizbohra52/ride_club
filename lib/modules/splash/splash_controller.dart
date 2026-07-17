@@ -3,6 +3,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/logger.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
+import '../../services/local_alerts_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/user_service.dart';
 
@@ -33,6 +34,8 @@ class SplashController extends GetxController {
         final String uid = _auth.uid!;
         // Register for notifications + save FCM token (fire-and-forget).
         Get.find<NotificationService>().init();
+        // Start client-side local alerts (free-plan push replacement).
+        Get.find<LocalAlertsService>().start();
         final profile = await _users.fetch(uid);
         next = (profile != null && profile.isComplete)
             ? Routes.home

@@ -86,7 +86,7 @@ class RideMapController extends GetxController
   final Map<String, LatLng> _lastRoutedFrom = <String, LatLng>{};
 
   /// Current zoom level - updated reactively from map position changes
-  final RxDouble zoomLevel = 16.5.obs;
+  final RxDouble zoomLevel = 12.0.obs;
 
   bool get hasDestination => destination.value != null;
 
@@ -129,6 +129,27 @@ class RideMapController extends GetxController
     });
     _rideLoc.startSharing(rideId, _loc.positionStream());
     members.bindStream(_rideLoc.watchLocations(rideId));
+
+    // Opened to focus a specific member (from Ride Detail / member sheet):
+    // pan to them once their first location fix arrives, so the map opens on
+    // THAT rider instead of me.
+    if (initialFocusUid != null) {
+      bool focused = false;
+      ever<List<MemberLocation>>(members, (List<MemberLocation> list) {
+        if (focused || _isDisposed) return;
+        for (final MemberLocation m in list) {
+          if (m.uid == initialFocusUid) {
+            focused = true;
+            animatedMapController.animateTo(
+              dest: LatLng(m.lat, m.lng),
+              zoom: 16,
+            );
+            showRecenter.value = true;
+            break;
+          }
+        }
+      });
+    }
     rideMembers.bindStream(_rideService.watchMembers(rideId));
     unread.bindStream(_chat.unreadCount(rideId));
 
@@ -256,15 +277,40 @@ class RideMapController extends GetxController
     return null;
   }
 
-  /// Camera center for a Google-Maps-style nav view: pushed *ahead* of the
-  /// target along its heading, so the marker sits in the lower third of the
-  /// screen with the road ahead filling the top.
+  /// Follow target's speed in km/h (self has no live speed → treat as 0).
+  double _followTargetSpeedKmh() {
+    final String? target = followTarget.value;
+    if (target == null) return 0;
+    for (final MemberLocation m in members) {
+      if (m.uid == target) return m.speedKmh;
+    }
+    return 0;
+  }
+
+  /// Below this speed the follow target is treated as stationary: like Google
+  /// Maps, we then center the marker (no ahead-offset) and keep the map
+  /// north-up instead of spinning to a stale/meaningless heading.
+  static const double _movingThresholdKmh = 3;
+
+  /// Whether the follow target is moving fast enough for the tilted,
+  /// heading-rotated nav view.
+  bool get _targetMoving => _followTargetSpeedKmh() >= _movingThresholdKmh;
+
+  /// Camera center for a Google-Maps-style nav view: while moving, pushed
+  /// *ahead* of the target along its heading so the marker sits in the lower
+  /// third with the road ahead on top. While stationary, centered on the
+  /// target (no offset).
   LatLng _cameraCenterBehind(LatLng target, double heading) {
+    if (!_targetMoving) return target;
     return _dist.offset(target, _navAheadMeters, heading);
   }
 
+  /// Map rotation for the follow view: aligned to the direction of travel
+  /// while moving, north-up (0) while stationary — matches Google Maps.
+  double _followRotation(double heading) => _targetMoving ? -heading : 0;
+
   /// How far ahead of the marker to place the camera center. ~260m at the
-  /// nav zoom (16.5) drops the marker to roughly the lower third of a phone
+  /// nav zoom (16) drops the marker to roughly the lower third of a phone
   /// screen; the "behind"/preview recenter uses a smaller shift.
   static const double _navAheadMeters = 260;
 
@@ -278,11 +324,19 @@ class RideMapController extends GetxController
   }
 
   /// "Stop"/"End" button: leave navigation and return to a free preview map.
+  /// Zooms back out to the default preview zoom (12) and levels the rotation.
   void stopTracking() {
     if (_isDisposed) return;
     isTracking.value = false;
     isFollowing.value = false;
     showRecenter.value = false;
+    followTarget.value = null;
+    zoomLevel.value = 12;
+    animatedMapController.animateTo(
+      dest: mapController.camera.center,
+      zoom: 12,
+      rotation: 0,
+    );
   }
 
   void _startFollowing({String? target}) {
@@ -291,6 +345,7 @@ class RideMapController extends GetxController
     followTarget.value = target;
     isFollowing.value = true;
     showRecenter.value = false;
+    zoomLevel.value = 16;
     final LatLng? pos = _followTargetPosition();
     if (pos == null) {
       Log.d('_startFollowing: no position found for target $target');
@@ -302,8 +357,8 @@ class RideMapController extends GetxController
     );
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
-      zoom: 16.5,
-      rotation: -heading,
+      zoom: 16,
+      rotation: _followRotation(heading),
     );
   }
 
@@ -319,7 +374,7 @@ class RideMapController extends GetxController
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
       zoom: mapController.camera.zoom,
-      rotation: -heading,
+      rotation: _followRotation(heading),
       // Glide over ~the fix cadence so movement looks continuous, not steppy.
       duration: const Duration(milliseconds: 900),
     );
@@ -380,12 +435,25 @@ class RideMapController extends GetxController
 
   /// Recenter FAB: resume following the target (self by default, or a specific
   /// member). If the target member is no longer available, falls back to self.
-  /// Animates the camera to center behind the target with a 16.5 zoom.
+  /// Animates the camera to center behind the target with a 16 zoom.
   void recenter() {
     if (_isDisposed) return;
-    isTracking.value = true;
-    isFollowing.value = true;
     showRecenter.value = false;
+
+    // Preview mode (navigation not started): just re-center on myself,
+    // north-up, keeping the current zoom — don't silently start navigation.
+    if (!isTracking.value) {
+      final LatLng? me = myLatLng.value;
+      if (me == null) return;
+      animatedMapController.animateTo(
+        dest: me,
+        zoom: mapController.camera.zoom,
+        rotation: 0,
+      );
+      return;
+    }
+
+    isFollowing.value = true;
     // Resolve target position – fallback to self if member not found
     LatLng? pos = _followTargetPosition();
     if (pos == null) {
@@ -395,19 +463,42 @@ class RideMapController extends GetxController
       if (pos == null) return;
     }
     final double heading = _followTargetHeading() ?? 0;
+    // Keep the user's current zoom if they've already zoomed in past the
+    // default nav zoom; otherwise snap to 16 (Google-Maps recenter feel).
+    final double currentZoom = mapController.camera.zoom;
+    final double zoom = currentZoom > 16 ? currentZoom : 16;
+    zoomLevel.value = zoom;
     Log.d('recenter: target=${followTarget.value}, heading=$heading');
     animatedMapController.animateTo(
       dest: _cameraCenterBehind(pos, heading),
-      zoom: 16.5,
-      rotation: -heading,
+      zoom: zoom,
+      rotation: _followRotation(heading),
     );
   }
 
-  /// Members list tap: enter navigation following this specific member.
+  /// Members list tap: change who we follow. Navigation itself only starts
+  /// from the Start button — so if we're already navigating, re-lock the
+  /// camera onto this member; if not, just switch the target and pan the
+  /// preview to them (no nav lock, keep current zoom).
   void followMember(MemberLocation m) {
     if (_isDisposed) return;
-    isTracking.value = true;
-    _startFollowing(target: m.uid);
+    followTarget.value = m.uid;
+    if (isTracking.value) {
+      _startFollowing(target: m.uid);
+      return;
+    }
+    // Preview: pan straight to THIS member's own coordinates (use the tapped
+    // record directly so we never fall back to my own location). Zoom in a bit
+    // if we're still at the far-out preview zoom so the rider is clearly seen.
+    final LatLng pos = LatLng(m.lat, m.lng);
+    final double currentZoom = mapController.camera.zoom;
+    animatedMapController.animateTo(
+      dest: pos,
+      zoom: currentZoom < 15 ? 16 : currentZoom,
+      rotation: 0,
+    );
+    // Show the recenter button so the user can jump back to their own view.
+    showRecenter.value = true;
   }
 
   /// Called when the user drags/pinches/zooms the map — stops auto-follow so
