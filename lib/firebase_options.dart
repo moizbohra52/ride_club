@@ -49,7 +49,7 @@ class DefaultFirebaseOptions {
       'https://ridetogether-nwaytech-default-rtdb.firebaseio.com';
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCfxkMNLUOPp1Zr5dnp9Z56UN6pB7LK1lg',
+    apiKey: '[GCP_API_KEY]',
     appId: '1:613319021790:android:76f202c566ee4292eade4f',
     messagingSenderId: '613319021790',
     projectId: 'ridetogether-nwaytech',
@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAz2Th3zCBnBgkpFcvSRRFiArcwt580dlw',
+    apiKey: '[GCP_API_KEY]',
     appId: '1:613319021790:ios:c07753edb4c88d71eade4f',
     messagingSenderId: '613319021790',
     projectId: 'ridetogether-nwaytech',
