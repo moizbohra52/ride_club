@@ -287,4 +287,60 @@ class RideService extends GetxService {
       onTimeout: () => throw Exception('Leave timed out.'),
     );
   }
+
+  /// Host-only: update the ride's name/stops/planned route in place. Members
+  /// following the live map read `plannedRoute` reactively, so this is how a
+  /// route correction reaches everyone already in the ride.
+  Future<void> updateRide({
+    required String rideId,
+    required String name,
+    RideDestination? origin,
+    List<RideDestination> waypoints = const <RideDestination>[],
+    RideDestination? destination,
+    List<LatLng>? plannedRoute,
+    double? plannedDistanceMeters,
+    double? plannedDurationSeconds,
+  }) {
+    return _rides.doc(rideId).update(<String, dynamic>{
+      'name': name.trim(),
+      'origin': origin?.toMap(),
+      'waypoints': waypoints.map((RideDestination w) => w.toMap()).toList(),
+      'destination': destination?.toMap(),
+      'plannedRoute': plannedRoute
+          ?.map((LatLng p) =>
+              <String, dynamic>{'lat': p.latitude, 'lng': p.longitude})
+          .toList(),
+      'plannedDistanceMeters': plannedDistanceMeters,
+      'plannedDurationSeconds': plannedDurationSeconds,
+    }).timeout(
+      _timeout,
+      onTimeout: () => throw Exception('Update timed out. Check your connection.'),
+    );
+  }
+
+  /// Host-only: permanently removes the ride — its doc, every member's and
+  /// pending requester's subcollection entries, and each member's `rideRefs`
+  /// pointer (so it also disappears from their "My Rides" list). Unlike
+  /// [endRide] (soft, keeps history) this cannot be undone.
+  Future<void> deleteRide(String rideId) async {
+    final DocumentReference<Map<String, dynamic>> rideRef = _rides.doc(rideId);
+    final QuerySnapshot<Map<String, dynamic>> members =
+        await rideRef.collection('members').get().timeout(_timeout);
+    final QuerySnapshot<Map<String, dynamic>> requests =
+        await rideRef.collection('requests').get().timeout(_timeout);
+
+    final WriteBatch batch = _db.batch();
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> m in members.docs) {
+      batch.delete(m.reference);
+      batch.delete(_rideRefs(m.id).doc(rideId));
+    }
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> r in requests.docs) {
+      batch.delete(r.reference);
+    }
+    batch.delete(rideRef);
+    await batch.commit().timeout(
+      _timeout,
+      onTimeout: () => throw Exception('Delete timed out. Check your connection.'),
+    );
+  }
 }

@@ -569,8 +569,8 @@ class RideMapView extends GetView<RideMapController> {
   /// they glide between fixes.
   List<Marker> _staticMarkers(BuildContext context, bool isDark) {
     final List<Marker> markers = <Marker>[];
-    final double counterRotation =
-        -controller.mapController.camera.rotation * (math.pi / 180);
+    final double mapRotationDeg = controller.mapController.camera.rotation;
+    final double counterRotation = -mapRotationDeg * (math.pi / 180);
 
     // Always show your own location as a marker
     final LatLng? me = controller.myLatLng.value;
@@ -598,6 +598,7 @@ class RideMapView extends GetView<RideMapController> {
               photoUrl: myProfile?.photoUrl,
               name: myProfile?.name ?? 'Me',
               arrowMode: arrowMode,
+              mapRotationDeg: mapRotationDeg,
             ),
           ),
         ),
@@ -653,6 +654,7 @@ class RideMapView extends GetView<RideMapController> {
   ) {
     final List<_MemberMarkerSpec> specs = <_MemberMarkerSpec>[];
     final List<LatLng>? planned = controller.plannedRoute.value;
+    final double mapRotationDeg = controller.mapController.camera.rotation;
     for (final MemberLocation m in controller.members) {
       if (m.uid == controller.uid) continue; // Don't duplicate the "me" marker
       final RideMember? profile = controller.rideMemberFor(m.uid);
@@ -682,6 +684,11 @@ class RideMapView extends GetView<RideMapController> {
             )
           : realPos;
 
+      final bool arrowMode =
+          controller.isTracking.value &&
+          controller.followTarget.value == m.uid &&
+          m.online &&
+          m.speedKmh >= 1;
       specs.add(
         _MemberMarkerSpec(
           uid: m.uid,
@@ -699,16 +706,14 @@ class RideMapView extends GetView<RideMapController> {
               heading: m.heading,
               speedKmh: m.speedKmh,
               isMe: false,
+              online: m.online,
               photoUrl: profile?.photoUrl,
               name: resolved.name,
               // While navigating and following THIS member: show the direction
               // arrow when they're online and moving; fall back to the profile
               // pin when they're offline (or standing still).
-              arrowMode:
-                  controller.isTracking.value &&
-                  controller.followTarget.value == m.uid &&
-                  m.online &&
-                  m.speedKmh >= 1,
+              arrowMode: arrowMode,
+              mapRotationDeg: mapRotationDeg,
             ),
           ),
         ),
@@ -1011,6 +1016,7 @@ class _MemberPin extends StatelessWidget {
   final double heading;
   final double speedKmh;
   final bool isMe;
+  final bool online;
   final String? photoUrl;
   final String name;
 
@@ -1018,6 +1024,12 @@ class _MemberPin extends StatelessWidget {
   /// nav-style) instead of the profile avatar — used for the member being
   /// actively followed while they're online and moving.
   final bool arrowMode;
+
+  /// Current map rotation in degrees. The whole pin is counter-rotated by
+  /// the marker layer so it stays upright on screen; the heading arrows
+  /// inside add this back so *they* still point along true heading instead
+  /// of also being counter-rotated to upright.
+  final double mapRotationDeg;
   const _MemberPin({
     required this.color,
     required this.heading,
@@ -1025,7 +1037,9 @@ class _MemberPin extends StatelessWidget {
     required this.isMe,
     required this.photoUrl,
     required this.name,
+    this.online = true,
     this.arrowMode = false,
+    this.mapRotationDeg = 0,
   });
 
   @override
@@ -1048,8 +1062,11 @@ class _MemberPin extends StatelessWidget {
               alignment: Alignment.center,
               children: <Widget>[
                 // Heading arrow behind the avatar, rotated to the heading.
+                // The pin is counter-rotated by the marker layer to stay
+                // upright, so add the map rotation back here to keep this
+                // arrow pointing along true heading rather than upright too.
                 Transform.rotate(
-                  angle: heading * math.pi / 180,
+                  angle: (heading + mapRotationDeg) * math.pi / 180,
                   child: CustomPaint(
                     size: const Size(52, 52),
                     painter: _ArrowPainter(color: color),
@@ -1089,11 +1106,11 @@ class _MemberPin extends StatelessWidget {
               ],
             ),
           ),
-          if (speedKmh >= 1)
+          if (!online || speedKmh >= 1)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: color,
+                color: online ? color : Colors.grey,
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
@@ -1104,7 +1121,7 @@ class _MemberPin extends StatelessWidget {
                 ],
               ),
               child: Text(
-                '${speedKmh.toStringAsFixed(0)} km/h',
+                online ? '${speedKmh.toStringAsFixed(0)} km/h' : 'Offline',
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 10,
@@ -1141,8 +1158,10 @@ class _MemberPin extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        // Same counter-rotation compensation as the small heading arrow
+        // above: net angle on screen ends up as pure heading.
         Transform.rotate(
-          angle: heading * math.pi / 180,
+          angle: (heading + mapRotationDeg) * math.pi / 180,
           child: CustomPaint(
             size: const Size(44, 44),
             painter: _NavArrowPainter(color: color),

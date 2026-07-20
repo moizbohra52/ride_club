@@ -10,6 +10,7 @@ import '../modules/profile_setup/profile_setup_binding.dart';
 import '../modules/profile_setup/profile_setup_view.dart';
 import '../modules/ride_map/ride_map_binding.dart';
 import '../modules/ride_map/ride_map_view.dart';
+import '../modules/rides/edit_ride_view.dart';
 import '../modules/rides/ride_detail_binding.dart';
 import '../modules/rides/ride_detail_view.dart';
 import '../modules/rides/rides_shell_binding.dart';
@@ -53,6 +54,11 @@ class AppPages {
       name: Routes.rideDetail,
       page: () => const RideDetailView(),
       binding: RideDetailBinding(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage<dynamic>(
+      name: Routes.editRide,
+      page: () => const EditRideView(),
       transition: Transition.rightToLeft,
     ),
     GetPage<dynamic>(

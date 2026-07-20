@@ -5,6 +5,7 @@ import '../../models/join_request.dart';
 import '../../models/ride.dart';
 import '../../models/ride_member.dart';
 import '../../models/sos_alert.dart';
+import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/ride_service.dart';
@@ -64,6 +65,27 @@ class RideDetailController extends GetxController {
     );
     if (!ok) return;
     await _guard(() => _rides.endRide(rideId));
+  }
+
+  void edit() {
+    final Ride? r = ride.value;
+    if (r == null) return;
+    Get.toNamed(Routes.editRide, arguments: r);
+  }
+
+  Future<void> delete() async {
+    final bool ok = await UiHelpers.confirm(
+      title: 'Delete ride?',
+      message:
+          'This permanently removes the ride for everyone. This cannot be undone.',
+      confirmText: 'Delete',
+      destructive: true,
+    );
+    if (!ok) return;
+    await _guard(() async {
+      await _rides.deleteRide(rideId);
+      Get.back();
+    });
   }
 
   Future<void> leave() async {

@@ -8,6 +8,7 @@ import '../../core/utils/logger.dart';
 import '../../models/member_location.dart';
 import '../../models/ride.dart';
 import '../../models/ride_member.dart';
+import '../../models/ride_position.dart';
 import '../../models/route_result.dart';
 import '../../models/sos_alert.dart';
 import '../../services/auth_service.dart';
@@ -122,12 +123,16 @@ class RideMapController extends GetxController
     final Position? pos = await _loc.currentPosition();
     if (pos != null) myLatLng.value = LatLng(pos.latitude, pos.longitude);
 
-    // Keep my own dot fresh, and share to RTDB, from the battery-aware stream.
-    _loc.positionStream().listen((p) {
+    // Keep my own dot fresh, and share to RTDB, from the SAME battery-aware
+    // stream — two separate positionStream() calls would each run their own
+    // independent GPS poll loop, out of phase with each other, so "my dot"
+    // and what gets written to RTDB would drift apart and double GPS calls.
+    final Stream<RidePosition> myPosition = _loc.positionStream().asBroadcastStream();
+    myPosition.listen((p) {
       myLatLng.value = LatLng(p.lat, p.lng);
       myHeading.value = p.heading;
     });
-    _rideLoc.startSharing(rideId, _loc.positionStream());
+    _rideLoc.startSharing(rideId, myPosition);
     members.bindStream(_rideLoc.watchLocations(rideId));
 
     // Opened to focus a specific member (from Ride Detail / member sheet):

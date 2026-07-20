@@ -13,6 +13,7 @@ abstract class Routes {
 
   // Phase 2 — home is now the rides tab shell; rideDetail opens one ride.
   static const String rideDetail = '/ride-detail';
+  static const String editRide = '/edit-ride';
   static const String profile = '/profile';
 
   // Phase 3+ (registered as those phases land)

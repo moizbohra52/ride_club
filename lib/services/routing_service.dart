@@ -43,13 +43,35 @@ class RoutingService extends GetxService {
         await Future<void>.delayed(Duration(milliseconds: waitMs));
       }
       _lastCall = DateTime.now();
-      out.complete(await _fetchMulti(stops, client));
+      final List<RouteResult> rs = await _fetchMulti(stops, client);
+      out.complete(rs.isEmpty ? null : rs.first);
     });
     return out.future;
   }
 
-  Future<RouteResult?> _fetchMulti(
-      List<LatLng> stops, http.Client? client) async {
+  /// Same as [routeMulti] but returns every alternative OSRM offers (only
+  /// meaningful for a 2-stop origin→destination route; OSRM ignores
+  /// `alternatives` once waypoints are involved), so the user can pick one
+  /// before creating the ride.
+  Future<List<RouteResult>> routeAlternatives(List<LatLng> stops,
+      {http.Client? client}) {
+    if (stops.length < 2) return Future<List<RouteResult>>.value(<RouteResult>[]);
+    final Completer<List<RouteResult>> out = Completer<List<RouteResult>>();
+    _chain = _chain.then((_) async {
+      final int sinceMs = DateTime.now().difference(_lastCall).inMilliseconds;
+      final int waitMs = _minSpacing.inMilliseconds - sinceMs;
+      if (waitMs > 0) {
+        await Future<void>.delayed(Duration(milliseconds: waitMs));
+      }
+      _lastCall = DateTime.now();
+      out.complete(await _fetchMulti(stops, client, alternatives: true));
+    });
+    return out.future;
+  }
+
+  Future<List<RouteResult>> _fetchMulti(
+      List<LatLng> stops, http.Client? client,
+      {bool alternatives = false}) async {
     final http.Client c = client ?? http.Client();
     try {
       final String coords = stops
@@ -57,7 +79,7 @@ class RoutingService extends GetxService {
           .join(';');
       final Uri uri = Uri.parse(
         '${AppConstants.osrmBaseUrl}/route/v1/driving/$coords'
-        '?overview=full&geometries=polyline&alternatives=false&steps=false',
+        '?overview=full&geometries=polyline&alternatives=$alternatives&steps=false',
       );
       final http.Response res = await c
           .get(uri, headers: <String, String>{
@@ -66,24 +88,24 @@ class RoutingService extends GetxService {
           .timeout(AppConstants.networkTimeout);
       if (res.statusCode != 200) {
         Log.e('OSRM multi HTTP ${res.statusCode}');
-        return null;
+        return <RouteResult>[];
       }
       final Map<String, dynamic> data =
           jsonDecode(res.body) as Map<String, dynamic>;
-      if (data['code'] != 'Ok') return null;
+      if (data['code'] != 'Ok') return <RouteResult>[];
       final List<dynamic> routes = data['routes'] as List<dynamic>;
-      if (routes.isEmpty) return null;
-      final Map<String, dynamic> r0 = routes.first as Map<String, dynamic>;
-      final List<List<double>> pts =
-          decodePolyline(r0['geometry'] as String);
-      return RouteResult(
-        points: pts.map((p) => LatLng(p[0], p[1])).toList(),
-        distanceMeters: (r0['distance'] as num).toDouble(),
-        durationSeconds: (r0['duration'] as num).toDouble(),
-      );
+      return routes.map((dynamic r) {
+        final Map<String, dynamic> rm = r as Map<String, dynamic>;
+        final List<List<double>> pts = decodePolyline(rm['geometry'] as String);
+        return RouteResult(
+          points: pts.map((p) => LatLng(p[0], p[1])).toList(),
+          distanceMeters: (rm['distance'] as num).toDouble(),
+          durationSeconds: (rm['duration'] as num).toDouble(),
+        );
+      }).toList();
     } catch (e, s) {
       Log.e('OSRM routeMulti failed', error: e, stack: s);
-      return null;
+      return <RouteResult>[];
     } finally {
       if (client == null) c.close();
     }

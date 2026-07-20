@@ -26,6 +26,12 @@ class RideDetailView extends GetView<RideDetailController> {
         appBar: AppBar(
           title: Text(ride?.name ?? 'Ride'),
           actions: <Widget>[
+            if (controller.amHost && (ride?.isActive ?? false))
+              IconButton(
+                tooltip: 'Edit ride',
+                onPressed: controller.edit,
+                icon: const Icon(Icons.edit_rounded),
+              ),
             _chatAction(),
             IconButton(
               tooltip: 'Share invite link',
@@ -89,11 +95,19 @@ class RideDetailView extends GetView<RideDetailController> {
                         () => _MembersCard(members: controller.members.toList()),
                       ),
                       const SizedBox(height: 24),
-                      if (controller.amHost && ride.isActive)
+                      if (controller.amHost && ride.isActive) ...<Widget>[
                         _dangerButton(
                           label: 'End ride',
                           icon: Icons.flag_rounded,
                           onTap: controller.endRide,
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (controller.amHost)
+                        _dangerButton(
+                          label: 'Delete ride',
+                          icon: Icons.delete_forever_rounded,
+                          onTap: controller.delete,
                         ),
                       if (!controller.amHost)
                         _dangerButton(
