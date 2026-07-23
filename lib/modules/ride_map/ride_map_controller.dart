@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
@@ -7,7 +9,9 @@ import 'package:latlong2/latlong.dart';
 import '../../core/utils/logger.dart';
 import '../../models/member_location.dart';
 import '../../models/ride.dart';
+import '../../models/ride_alert.dart';
 import '../../models/ride_member.dart';
+import '../../models/ride_memory.dart';
 import '../../models/ride_position.dart';
 import '../../models/route_result.dart';
 import '../../models/sos_alert.dart';
@@ -15,6 +19,7 @@ import '../../services/auth_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/location_service.dart';
 import '../../services/ride_location_service.dart';
+import '../../services/ride_memory_service.dart';
 import '../../services/ride_service.dart';
 import '../../services/routing_service.dart';
 import '../../services/sos_service.dart';
@@ -34,6 +39,7 @@ class RideMapController extends GetxController
   final RideLocationService _rideLoc = Get.find<RideLocationService>();
   final RoutingService _routing = Get.find<RoutingService>();
   final RideService _rideService = Get.find<RideService>();
+  final RideMemoryService _memoryService = Get.find<RideMemoryService>();
   final ChatService _chat = Get.find<ChatService>();
   final SosService _sos = Get.find<SosService>();
   final AuthService _auth = Get.find<AuthService>();
@@ -50,6 +56,14 @@ class RideMapController extends GetxController
 
   final RxList<MemberLocation> members = <MemberLocation>[].obs;
   final RxList<RideMember> rideMembers = <RideMember>[].obs;
+
+  /// Shared trip memories (pins + logs) for this ride.
+  final RxList<RideMemory> memories = <RideMemory>[].obs;
+
+  /// The current ride doc — held so the map knows who the host is (for
+  /// delete-any-memory rights) alongside its destination/route reads.
+  final Rxn<Ride> ride = Rxn<Ride>();
+  bool get amHost => uid != null && (ride.value?.isHost(uid!) ?? false);
   final Rxn<LatLng> myLatLng = Rxn<LatLng>();
   final RxDouble myHeading = 0.0.obs;
   final RxBool ready = false.obs;
@@ -88,6 +102,30 @@ class RideMapController extends GetxController
 
   /// Current zoom level - updated reactively from map position changes
   final RxDouble zoomLevel = 12.0.obs;
+
+  // --- Transient in-app alerts (overtake / offline / off-route / arrived +
+  // a periodic per-member status digest). Shown as slide-in cards over the map
+  // by the view; each is auto-dismissed after its ttl. ---
+  final RxList<RideAlert> alerts = <RideAlert>[].obs;
+  int _alertSeq = 0;
+
+  /// Per-member snapshots used to detect *transitions* (so we alert once, on
+  /// change, not every fix).
+  final Map<String, double> _lastDestDist = <String, double>{}; // meters
+  final Map<String, bool> _wasOnline = <String, bool>{};
+  final Map<String, bool> _wasOffRoute = <String, bool>{};
+  final Set<String> _arrived = <String>{};
+  final Set<String> _overtaken = <String>{}; // members already ahead of me
+
+  /// How close (m) to the destination counts as "arrived".
+  static const double _arriveMeters = 100;
+
+  /// How far (m) off the route counts as "off route".
+  static const double _offRouteMeters = 150;
+
+  /// Periodic status digest timer + which member to report next (round-robin).
+  Timer? _statusTimer;
+  int _statusCursor = 0;
 
   bool get hasDestination => destination.value != null;
 
@@ -174,11 +212,15 @@ class RideMapController extends GetxController
 
     // Destination (one-shot-ish stream from the ride doc).
     _rideService.watchRide(rideId).listen((Ride? r) {
+      ride.value = r;
       final dest = r?.destination;
       destination.value = dest == null ? null : LatLng(dest.lat, dest.lng);
       plannedRoute.value = r?.plannedRoute;
       orderedStops.value = r?.orderedStops ?? <RideDestination>[];
     });
+
+    // Shared trip memories (pins + logs) — everyone in the ride sees them.
+    memories.bindStream(_memoryService.watch(rideId));
 
     // My route: recompute when I move ≥100m or go off-route.
     ever<LatLng?>(myLatLng, _maybeRouteMe);
@@ -196,8 +238,176 @@ class RideMapController extends GetxController
     ever<List<MemberLocation>>(members, (_) => _followIfActive());
     ever<double>(myHeading, (_) => _followIfActive());
 
+    // Transient alerts: inspect each members fix for events (overtake / offline
+    // / off-route / arrived).
+    ever<List<MemberLocation>>(members, _detectAlerts);
+    // Periodic per-member status digest every 2 minutes.
+    _statusTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _emitStatusDigest(),
+    );
+
     ready.value = true;
   }
+
+  // ---------------------------------------------------------------------------
+  // Transient alerts
+  // ---------------------------------------------------------------------------
+
+  void _pushAlert(RideAlertType type, String title, String message) {
+    if (_isDisposed) return;
+    final RideAlert alert = RideAlert(
+      id: _alertSeq++,
+      type: type,
+      title: title,
+      message: message,
+    );
+    alerts.add(alert);
+    // Keep the stack short so cards never pile up on screen.
+    if (alerts.length > 3) alerts.removeAt(0);
+    // Auto-dismiss after the alert's ttl.
+    Timer(alert.ttl, () => dismissAlert(alert.id));
+  }
+
+  /// Removes an alert (auto after ttl, or when the user swipes it away).
+  void dismissAlert(int id) {
+    if (_isDisposed) return;
+    alerts.removeWhere((RideAlert a) => a.id == id);
+  }
+
+  String _nameFor(String memberUid) =>
+      rideMemberFor(memberUid)?.name ?? 'A rider';
+
+  /// My own remaining distance to the destination (meters), or null if unknown.
+  double? get _myDestMeters => myRoute.value?.distanceMeters;
+
+  /// A member's remaining distance to the destination (meters): prefer their
+  /// computed route, else straight-line to the destination.
+  double? _memberDestMeters(MemberLocation m) {
+    final RouteResult? r = memberRoutes[m.uid];
+    if (r != null) return r.distanceMeters;
+    final LatLng? dest = destination.value;
+    if (dest == null) return null;
+    return _meters(LatLng(m.lat, m.lng), dest);
+  }
+
+  void _detectAlerts(List<MemberLocation> list) {
+    if (_isDisposed) return;
+    final LatLng? dest = destination.value;
+    for (final MemberLocation m in list) {
+      if (m.uid == uid) continue;
+
+      // --- Offline transition ---
+      final bool wasOnline = _wasOnline[m.uid] ?? m.online;
+      if (wasOnline && !m.online) {
+        _pushAlert(
+          RideAlertType.offline,
+          '${_nameFor(m.uid)} offline',
+          '${_nameFor(m.uid)} abhi offline hai — location update ruk gaya.',
+        );
+      }
+      _wasOnline[m.uid] = m.online;
+
+      if (dest != null) {
+        final LatLng pos = LatLng(m.lat, m.lng);
+        final double destDist = _meters(pos, dest);
+
+        // --- Arrived (once) ---
+        if (destDist <= _arriveMeters && !_arrived.contains(m.uid)) {
+          _arrived.add(m.uid);
+          _pushAlert(
+            RideAlertType.arrived,
+            '${_nameFor(m.uid)} pohch gaya',
+            '${_nameFor(m.uid)} destination pe pohch gaya.',
+          );
+        } else if (destDist > _arriveMeters * 3) {
+          // Left the area again — allow a future "arrived" alert.
+          _arrived.remove(m.uid);
+        }
+
+        // --- Overtake: crosses ahead of me (closer to dest than I am) ---
+        final double? mine = _myDestMeters;
+        final double? theirs = _memberDestMeters(m);
+        if (mine != null && theirs != null) {
+          final bool aheadNow = theirs < mine;
+          final bool wasAhead = _overtaken.contains(m.uid);
+          if (aheadNow && !wasAhead && m.online) {
+            _overtaken.add(m.uid);
+            final String gap = _distText((mine - theirs).abs());
+            _pushAlert(
+              RideAlertType.overtake,
+              '${_nameFor(m.uid)} ne overtake kiya',
+              '${_nameFor(m.uid)} ab aapse $gap aage hai.',
+            );
+          } else if (!aheadNow && wasAhead) {
+            _overtaken.remove(m.uid); // fell back behind me
+          }
+        }
+
+        _lastDestDist[m.uid] = destDist;
+      }
+
+      // --- Off-route transition ---
+      final List<LatLng>? route =
+          (plannedRoute.value != null && plannedRoute.value!.length >= 2)
+              ? plannedRoute.value
+              : memberRoutes[m.uid]?.points;
+      if (route != null && route.length >= 2) {
+        final double d = _distanceToRoute(LatLng(m.lat, m.lng), route);
+        final bool offNow = d > _offRouteMeters;
+        final bool wasOff = _wasOffRoute[m.uid] ?? false;
+        if (offNow && !wasOff && m.online) {
+          _pushAlert(
+            RideAlertType.offRoute,
+            '${_nameFor(m.uid)} route se hata',
+            '${_nameFor(m.uid)} route se ${_distText(d)} door chala gaya.',
+          );
+        }
+        _wasOffRoute[m.uid] = offNow;
+      }
+    }
+  }
+
+  /// Round-robin: every tick, report one member's distance / ETA to the
+  /// destination and how far ahead/behind me they are.
+  void _emitStatusDigest() {
+    if (_isDisposed) return;
+    final List<MemberLocation> others =
+        members.where((MemberLocation m) => m.uid != uid).toList();
+    if (others.isEmpty || destination.value == null) return;
+
+    final MemberLocation m = others[_statusCursor % others.length];
+    _statusCursor++;
+
+    final double? theirs = _memberDestMeters(m);
+    if (theirs == null) return;
+    final RouteResult? r = memberRoutes[m.uid];
+    final String eta = r != null ? ' · ${r.etaText} me pohchega' : '';
+
+    final double? mine = _myDestMeters;
+    String gap = '';
+    if (mine != null) {
+      final double diff = (mine - theirs).abs();
+      if (diff > 50) {
+        gap = theirs < mine
+            ? ' · aap ${_distText(diff)} piche'
+            : ' · aap ${_distText(diff)} aage';
+      } else {
+        gap = ' · aap saath-saath';
+      }
+    }
+
+    _pushAlert(
+      RideAlertType.status,
+      _nameFor(m.uid),
+      'Destination se ${_distText(theirs)}$eta$gap',
+    );
+  }
+
+  /// Compact distance label (matches [RouteResult.distanceText] style).
+  String _distText(double meters) => meters < 1000
+      ? '${meters.round()} m'
+      : '${(meters / 1000).toStringAsFixed(1)} km';
 
   double _meters(LatLng a, LatLng b) => _dist.as(LengthUnit.Meter, a, b);
 
@@ -524,6 +734,7 @@ class RideMapController extends GetxController
   @override
   void onClose() {
     _isDisposed = true;
+    _statusTimer?.cancel();
     animatedMapController.dispose();
     _rideLoc.stopSharing(rideId);
     super.onClose();

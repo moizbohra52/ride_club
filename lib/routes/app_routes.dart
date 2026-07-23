@@ -20,4 +20,7 @@ abstract class Routes {
   static const String rideMap = '/ride-map';
   static const String chat = '/chat';
   static const String rideHistory = '/ride-history';
+
+  // Trip memories + per-member history
+  static const String memberHistory = '/member-history';
 }

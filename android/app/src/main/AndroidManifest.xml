@@ -22,6 +22,9 @@
     <!-- Camera (optional profile photo) -->
     <uses-permission android:name="android.permission.CAMERA"/>
 
+    <!-- Microphone (voice notes on trip memories) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <application
         android:label="RideClub"
         android:name="${applicationName}"

@@ -81,6 +81,10 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>RideClub needs photo access so you can choose a profile picture.</string>
 
+	<!-- ============ Microphone (voice notes on trip memories) ============ -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>RideClub uses the microphone so you can record voice notes for places and trip memories.</string>
+
 	<!-- ============ Background modes (Phase 6/7) ============ -->
 	<key>UIBackgroundModes</key>
 	<array>

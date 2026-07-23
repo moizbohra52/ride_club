@@ -7,6 +7,7 @@ import '../../models/ride_member.dart';
 import '../../models/route_result.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/status_badge.dart';
+import '../member_history/member_history_controller.dart' show MemberHistoryArgs;
 import '../ride_map/ride_map_controller.dart' show RideMapArgs;
 
 /// Shows a bottom sheet with a member's profile info, and — when [live] is
@@ -110,6 +111,24 @@ void showMemberDetail(
               _LiveStatus(live: live, route: route)
             else
               _NoLiveData(rideId: rideId, focusUid: member.uid),
+            const SizedBox(height: AppSpacing.md),
+            OutlinedButton.icon(
+              onPressed: () {
+                Get.back();
+                Get.toNamed(
+                  Routes.memberHistory,
+                  arguments: MemberHistoryArgs(
+                    uid: member.uid,
+                    name: member.name,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history_rounded, size: 20),
+              label: const Text('View ride history'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+              ),
+            ),
           ],
         ),
       ),

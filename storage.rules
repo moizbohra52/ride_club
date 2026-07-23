@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// RideClub Cloud Storage security rules.
+//
+// Layout:
+//   profile_photos/{uid}.jpg                       — profile photos
+//   ride_memories/{rideId}/{memoryId}/photo_*.jpg  — memory photos
+//   ride_memories/{rideId}/{memoryId}/voice.m4a    — memory voice notes
+//
+// Memory read/write is gated on being signed in. Fine-grained "is a member of
+// this ride" checks aren't available in Storage rules without cross-service
+// lookups, so membership is enforced at the Firestore layer (a non-member has
+// no memory doc, hence no download URL); Storage keeps auth-only access.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Profile photos — owner writes, anyone signed in reads.
+    match /profile_photos/{file} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    // Trip memory media. Cap uploads to sane sizes and expected content types.
+    match /ride_memories/{rideId}/{memoryId}/{file} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+        && request.resource.size < 15 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('audio/.*')
+        );
+      allow delete: if signedIn();
+    }
+  }
+}

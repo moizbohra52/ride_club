@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../core/theme/app_colors.dart';
 import '../models/join_request.dart';
 import '../models/ride.dart';
+import '../models/ride_history_entry.dart';
 import '../models/ride_member.dart';
 import 'auth_service.dart';
 import 'user_service.dart';
@@ -26,6 +27,11 @@ class RideService extends GetxService {
 
   CollectionReference<Map<String, dynamic>> _rideRefs(String uid) =>
       _db.collection('users').doc(uid).collection('rideRefs');
+
+  /// Permanent per-user ride history (never deleted, only status-patched on
+  /// leave). Drives the member-history screen. See [RideHistoryEntry].
+  CollectionReference<Map<String, dynamic>> _rideHistory(String uid) =>
+      _db.collection('users').doc(uid).collection('rideHistory');
 
   /// A 6-char code from an unambiguous alphabet (no 0/O/1/I).
   String generateCode() => List<String>.generate(
@@ -86,6 +92,13 @@ class RideService extends GetxService {
     batch.set(rideRef, ride.toMap(isNew: true));
     batch.set(rideRef.collection('members').doc(uid), host.toMap(isNew: true));
     batch.set(_rideRefs(uid).doc(rideRef.id), <String, dynamic>{
+      'rideId': rideRef.id,
+      'name': name.trim(),
+      'role': 'host',
+      'status': 'active',
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(_rideHistory(uid).doc(rideRef.id), <String, dynamic>{
       'rideId': rideRef.id,
       'name': name.trim(),
       'role': 'host',
@@ -154,6 +167,16 @@ class RideService extends GetxService {
       return rides;
     });
   }
+
+  /// A member's permanent ride history (newest first). Reads
+  /// `users/{uid}/rideHistory`, which — unlike `rideRefs` — is kept even after
+  /// the member leaves a ride. Used by the member-history screen.
+  Stream<List<RideHistoryEntry>> watchMemberRides(String uid) => _rideHistory(
+    uid,
+  ).orderBy('joinedAt', descending: true).snapshots().map(
+    (QuerySnapshot<Map<String, dynamic>> s) =>
+        s.docs.map(RideHistoryEntry.fromDoc).toList(),
+  );
 
   Stream<Ride?> watchRide(String id) =>
       _rides.doc(id).snapshots().map((d) => d.exists ? Ride.fromDoc(d) : null);
@@ -250,6 +273,21 @@ class RideService extends GetxService {
       'status': 'active',
       'joinedAt': FieldValue.serverTimestamp(),
     });
+    // Permanent history entry. merge:true so a rider who left and rejoined
+    // reactivates their existing entry (and clears an old leftAt) rather than
+    // stacking duplicates.
+    batch.set(
+      _rideHistory(req.uid).doc(rideId),
+      <String, dynamic>{
+        'rideId': rideId,
+        'name': req.name,
+        'role': 'rider',
+        'status': 'active',
+        'leftAt': null,
+        'joinedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
     await batch.commit().timeout(
       _timeout,
       onTimeout: () =>
@@ -282,6 +320,16 @@ class RideService extends GetxService {
       'memberCount': FieldValue.increment(-1),
     });
     batch.delete(_rideRefs(uid).doc(rideId));
+    // History survives leaving — only mark it as left so the member-history
+    // screen still shows this ride.
+    batch.set(
+      _rideHistory(uid).doc(rideId),
+      <String, dynamic>{
+        'status': 'left',
+        'leftAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
     await batch.commit().timeout(
       _timeout,
       onTimeout: () => throw Exception('Leave timed out.'),

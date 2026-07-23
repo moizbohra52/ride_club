@@ -1,0 +1,90 @@
+rules_version = '2';
+
+// RideClub Firestore security rules.
+//
+// Model recap:
+//   users/{uid}                      — profile (owner-only writes)
+//   users/{uid}/rideRefs/{rideId}    — live "My Rides" pointers
+//   users/{uid}/rideHistory/{rideId} — permanent per-user ride history
+//   rides/{rideId}                   — a ride; host = createdBy
+//   rides/{rideId}/members/{uid}     — one doc per member
+//   rides/{rideId}/requests/{uid}    — join requests
+//   rides/{rideId}/memories/{id}     — shared trip memories (pins + logs)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Is the caller a member of this ride?
+    function isMember(rideId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/rides/$(rideId)/members/$(request.auth.uid));
+    }
+
+    // Is the caller the ride's host?
+    function isRideHost(rideId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/rides/$(rideId)).data.createdBy == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+
+      // Live ride pointers — owner-only (writes happen in the owner's batches).
+      match /rideRefs/{rideId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+
+      // Permanent ride history. The owner writes their own on create; the host
+      // writes a rider's entry when accepting a join request, so allow a write
+      // from either the owner or that ride's host. Readable by any signed-in
+      // user (drives the member-history screen).
+      match /rideHistory/{rideId} {
+        allow read: if signedIn();
+        allow write: if signedIn()
+          && (request.auth.uid == uid || isRideHost(rideId));
+      }
+    }
+
+    match /rides/{rideId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+      // Members may update (e.g. memberCount on join/leave); host may edit/end.
+      allow update: if isMember(rideId) || isRideHost(rideId);
+      allow delete: if isRideHost(rideId);
+
+      match /members/{memberId} {
+        allow read: if signedIn();
+        // A user manages their own membership doc; the host manages any member
+        // (accepting requests, removing riders).
+        allow write: if signedIn()
+          && (request.auth.uid == memberId || isRideHost(rideId));
+      }
+
+      match /requests/{requesterId} {
+        allow read: if isMember(rideId) || isRideHost(rideId)
+          || request.auth.uid == requesterId;
+        // A rider creates their own request; the host resolves it.
+        allow create: if signedIn() && request.auth.uid == requesterId;
+        allow update, delete: if isRideHost(rideId)
+          || request.auth.uid == requesterId;
+      }
+
+      // Shared trip memories: any member reads; the author creates their own;
+      // the author or the host deletes.
+      match /memories/{memoryId} {
+        allow read: if isMember(rideId) || isRideHost(rideId);
+        allow create: if isMember(rideId)
+          && request.resource.data.authorId == request.auth.uid;
+        allow update: if signedIn()
+          && resource.data.authorId == request.auth.uid;
+        allow delete: if signedIn()
+          && (resource.data.authorId == request.auth.uid || isRideHost(rideId));
+      }
+    }
+  }
+}

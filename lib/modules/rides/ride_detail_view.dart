@@ -12,6 +12,7 @@ import '../../routes/app_routes.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/loading_overlay.dart';
 import '../../widgets/status_badge.dart';
+import '../ride_map/memories/trip_memories_view.dart';
 import 'member_detail_sheet.dart';
 import 'ride_detail_controller.dart';
 
@@ -32,6 +33,16 @@ class RideDetailView extends GetView<RideDetailController> {
                 onPressed: controller.edit,
                 icon: const Icon(Icons.edit_rounded),
               ),
+            IconButton(
+              tooltip: 'Trip memories',
+              onPressed: () => Get.to<void>(
+                () => TripMemoriesView(
+                  rideId: controller.rideId,
+                  isHost: controller.amHost,
+                ),
+              ),
+              icon: const Icon(Icons.photo_album_outlined),
+            ),
             _chatAction(),
             IconButton(
               tooltip: 'Share invite link',

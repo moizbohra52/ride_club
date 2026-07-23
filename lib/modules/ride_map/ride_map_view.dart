@@ -13,11 +13,15 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/glass_card.dart';
 import '../../models/member_location.dart';
 import '../../models/ride.dart';
+import '../../models/ride_alert.dart';
 import '../../models/ride_member.dart';
+import '../../models/ride_memory.dart';
 import '../../models/route_result.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/gradient_button.dart';
 import '../rides/member_detail_sheet.dart';
+import 'memories/add_memory_sheet.dart';
+import 'memories/memory_detail_sheet.dart';
 import 'ride_map_controller.dart';
 
 class RideMapView extends GetView<RideMapController> {
@@ -95,6 +99,13 @@ class RideMapView extends GetView<RideMapController> {
                   controller.updateZoomLevel(camera.zoom);
                   if (hasGesture) controller.onMapDragged();
                 },
+                onLongPress: (TapPosition _, LatLng point) =>
+                    showAddMemorySheet(
+                  context,
+                  rideId: controller.rideId,
+                  point: point,
+                  kind: 'pin',
+                ),
               ),
               children: <Widget>[
                 TileLayer(
@@ -102,6 +113,9 @@ class RideMapView extends GetView<RideMapController> {
                   userAgentPackageName: AppConstants.userAgentPackageName,
                 ),
                 Obx(() => PolylineLayer(polylines: _routePolylines(isDark))),
+                // Shared trip memories (pins + logs) beneath the live rider
+                // pins, so a moving rider is never hidden behind a place pin.
+                Obx(() => MarkerLayer(markers: _memoryMarkers(context))),
                 // Static markers (me + stops) snap instantly; other members'
                 // markers glide between fixes for a Google-Maps-style feel.
                 Obx(
@@ -156,6 +170,7 @@ class RideMapView extends GetView<RideMapController> {
                                   )
                                 : const SizedBox.shrink(),
                           ),
+                          _alertStack(context),
                         ],
                       ),
                     ),
@@ -204,6 +219,12 @@ class RideMapView extends GetView<RideMapController> {
                                   ),
                                 );
                               }),
+                              _MapControlButton(
+                                icon: Icons.add_location_alt_rounded,
+                                tooltip: 'Add a memory here',
+                                onTap: () => _addMemoryAtMyLocation(context),
+                              ),
+                              const SizedBox(height: 10),
                               _MapControlButton(
                                 icon: Icons.fit_screen_rounded,
                                 tooltip: 'Fit all riders',
@@ -485,6 +506,30 @@ class RideMapView extends GetView<RideMapController> {
     return distance.offset(bestPoint, offsetMeters, offsetBearing);
   }
 
+  /// Transient alert cards (overtake / offline / off-route / arrived / status),
+  /// stacked under the info card. Each animates in and is removed by the
+  /// controller after its ttl. Swiping a card dismisses it early.
+  Widget _alertStack(BuildContext context) {
+    return Obx(() {
+      final List<RideAlert> items = controller.alerts.toList();
+      if (items.isEmpty) return const SizedBox.shrink();
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final RideAlert a in items)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _AlertCard(
+                key: ValueKey<int>(a.id),
+                alert: a,
+                onDismiss: () => controller.dismissAlert(a.id),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+
   Widget _infoCard(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
 
@@ -563,6 +608,45 @@ class RideMapView extends GetView<RideMapController> {
   /// emergency control without being distracting. Tapping fires [onPressed].
   Widget _pulsingSosFab({required VoidCallback onPressed}) =>
       _SosFab(onPressed: onPressed);
+
+  /// Capture a 'log' memory at the user's current location. Falls back to the
+  /// map center if we don't have a GPS fix yet.
+  void _addMemoryAtMyLocation(BuildContext context) {
+    final LatLng point =
+        controller.myLatLng.value ?? controller.mapController.camera.center;
+    showAddMemorySheet(
+      context,
+      rideId: controller.rideId,
+      point: point,
+      kind: 'log',
+    );
+  }
+
+  /// Pins for shared trip memories. Tapping one opens its detail sheet.
+  List<Marker> _memoryMarkers(BuildContext context) {
+    final List<Marker> markers = <Marker>[];
+    for (final RideMemory m in controller.memories) {
+      markers.add(
+        Marker(
+          key: ValueKey<String>('memory_${m.id}'),
+          point: m.latLng,
+          width: 44,
+          height: 54,
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            onTap: () => showMemoryDetail(
+              context,
+              memory: m,
+              rideId: controller.rideId,
+              isHost: controller.amHost,
+            ),
+            child: _MemoryPin(memory: m),
+          ),
+        ),
+      );
+    }
+    return markers;
+  }
 
   /// Markers that snap instantly: the user's own location and the route
   /// stops/waypoints. Other members are drawn by [_AnimatedMemberMarkers] so
@@ -1257,6 +1341,182 @@ class _NavArrowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _NavArrowPainter old) => old.color != color;
+}
+
+/// A single transient alert card: a glass surface with a tinted icon chip,
+/// title, and message. Slides + fades in on mount; swipe horizontally to
+/// dismiss early.
+class _AlertCard extends StatefulWidget {
+  final RideAlert alert;
+  final VoidCallback onDismiss;
+  const _AlertCard({super.key, required this.alert, required this.onDismiss});
+
+  @override
+  State<_AlertCard> createState() => _AlertCardState();
+}
+
+class _AlertCardState extends State<_AlertCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _fade = CurvedAnimation(parent: _c, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, -0.25),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _c, curve: Curves.easeOutCubic));
+    _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final RideAlert a = widget.alert;
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Dismissible(
+          key: ValueKey<int>(a.id),
+          direction: DismissDirection.horizontal,
+          onDismissed: (_) => widget.onDismiss(),
+          child: GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: a.color.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(a.icon, color: a.color, size: 19),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        a.title,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        a.message,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          height: 1.25,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A teardrop pin for a shared trip memory. The glyph hints at its richest
+/// content: a mic for voice, a photo icon for photos, else a note/pin icon.
+class _MemoryPin extends StatelessWidget {
+  final RideMemory memory;
+  const _MemoryPin({required this.memory});
+
+  @override
+  Widget build(BuildContext context) {
+    final IconData glyph = memory.hasVoice
+        ? Icons.mic_rounded
+        : memory.hasPhotos
+            ? Icons.photo_rounded
+            : (memory.isPin
+                ? Icons.push_pin_rounded
+                : Icons.sticky_note_2_rounded);
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.7, end: 1),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutBack,
+      builder: (BuildContext context, double scale, Widget? child) =>
+          Transform.scale(scale: scale, child: child),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.seed,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2.5),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(glyph, color: Colors.white, size: 17),
+          ),
+          // Small stem so the circle reads as a map pin anchored at its point.
+          Transform.translate(
+            offset: const Offset(0, -3),
+            child: CustomPaint(
+              size: const Size(10, 8),
+              painter: _PinStemPainter(color: AppColors.seed),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Draws the little triangular stem under a memory pin's circle.
+class _PinStemPainter extends CustomPainter {
+  final Color color;
+  _PinStemPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Path p = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PinStemPainter old) => old.color != color;
 }
 
 /// Modern map control button with gradient background and smooth animations.

@@ -8,6 +8,8 @@ import '../modules/profile/profile_binding.dart';
 import '../modules/profile/profile_view.dart';
 import '../modules/profile_setup/profile_setup_binding.dart';
 import '../modules/profile_setup/profile_setup_view.dart';
+import '../modules/member_history/member_history_binding.dart';
+import '../modules/member_history/member_history_view.dart';
 import '../modules/ride_map/ride_map_binding.dart';
 import '../modules/ride_map/ride_map_view.dart';
 import '../modules/rides/edit_ride_view.dart';
@@ -78,6 +80,12 @@ class AppPages {
       page: () => const ChatView(),
       binding: ChatBinding(),
       transition: Transition.downToUp,
+    ),
+    GetPage<dynamic>(
+      name: Routes.memberHistory,
+      page: () => const MemberHistoryView(),
+      binding: MemberHistoryBinding(),
+      transition: Transition.rightToLeft,
     ),
   ];
 }
